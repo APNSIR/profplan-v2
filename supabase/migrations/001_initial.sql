@@ -1,0 +1,14 @@
+create extension if not exists pgcrypto;
+create table if not exists profiles(id uuid primary key references auth.users(id) on delete cascade, full_name text, role text not null default 'teacher' check(role in ('teacher','hod','principal','admin')), department text);
+create table if not exists academic_years(id uuid primary key default gen_random_uuid(), title text not null, start_date date not null, end_date date not null);
+create table if not exists holidays(id uuid primary key default gen_random_uuid(), academic_year_id uuid references academic_years(id) on delete cascade, title text not null, date date not null, type text not null);
+create table if not exists courses(id uuid primary key default gen_random_uuid(), course_name text not null, course_code text, semester text, department text, total_hours numeric default 0, teacher_id uuid references auth.users(id));
+create table if not exists syllabus_topics(id uuid primary key default gen_random_uuid(), course_id uuid references courses(id) on delete cascade, unit_number int, topic_name text not null, planned_hours numeric default 1, order_index int default 0);
+create table if not exists timetable_slots(id uuid primary key default gen_random_uuid(), course_id uuid references courses(id) on delete cascade, day_of_week int not null, period_no int not null, start_time time not null, end_time time not null, room text, teacher_id uuid references auth.users(id));
+create table if not exists progress_logs(id uuid primary key default gen_random_uuid(), course_id uuid references courses(id) on delete cascade, timetable_slot_id uuid references timetable_slots(id), topic_id uuid references syllabus_topics(id), log_date date not null, topic_covered_text text, status text not null, hours_taken numeric default 0, remarks text, attendance numeric, class_type text, teacher_id uuid references auth.users(id));
+alter table profiles enable row level security; alter table courses enable row level security; alter table syllabus_topics enable row level security; alter table timetable_slots enable row level security; alter table progress_logs enable row level security;
+create policy "own profile" on profiles for all using(id=auth.uid()) with check(id=auth.uid());
+create policy "own courses" on courses for all using(teacher_id=auth.uid()) with check(teacher_id=auth.uid());
+create policy "own topics" on syllabus_topics for all using(course_id in(select id from courses where teacher_id=auth.uid())) with check(course_id in(select id from courses where teacher_id=auth.uid()));
+create policy "own slots" on timetable_slots for all using(teacher_id=auth.uid()) with check(teacher_id=auth.uid());
+create policy "own logs" on progress_logs for all using(teacher_id=auth.uid()) with check(teacher_id=auth.uid());

@@ -1,0 +1,25 @@
+import { MetadataRoute } from 'next';
+
+export default function manifest(): MetadataRoute.Manifest {
+    return {
+        name: 'ProfPlan - E-Lesson Plan & Progress Register',
+        short_name: 'ProfPlan',
+        description: 'Academic Lesson Plan & Daily Progress Register by APNSIR Foundation',
+        start_url: '/today',
+        display: 'standalone',
+        background_color: '#020617',
+        theme_color: '#1d4ed8',
+        icons: [
+            {
+                src: '/apnsir-logo.png',
+                sizes: '192x192',
+                type: 'image/png',
+            },
+            {
+                src: '/apnsir-logo.png',
+                sizes: '512x512',
+                type: 'image/png',
+            },
+        ],
+    };
+}

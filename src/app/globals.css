@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root{color-scheme:light}*{box-sizing:border-box}body{margin:0;background:#f8fafc;color:#0f172a;font-family:Arial,Helvetica,sans-serif}
+.card{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:16px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.btn{border-radius:10px;padding:9px 13px;font-weight:700;border:1px solid #cbd5e1;background:white}
+.btn-primary{background:#0f172a;color:white;border-color:#0f172a}.input{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:10px;background:white}
+.badge{display:inline-flex;border-radius:999px;padding:4px 9px;font-size:12px;font-weight:700}
+@media(min-width:768px){.main{padding-bottom:32px}}
+@keyframes namasteEntrance {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.namaste-entrance {
+    animation: namasteEntrance 1.2s ease-out forwards;
+}

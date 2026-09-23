@@ -1,0 +1,66 @@
+{
+  "name": "profplan",
+  "version": "2.0.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "electron": "electron .",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "dist:win": "next build && electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.apnsir.profplan",
+    "productName": "ProfPlan",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "main.js",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/apnsir-logo.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ProfPlan"
+    }
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/ios": "^8.5.1",
+    "@supabase/supabase-js": "2.45.4",
+    "jspdf": "2.5.2",
+    "lucide-react": "0.468.0",
+    "next": "14.2.15",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "xlsx": "0.18.5"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
+    "@types/node": "22.10.1",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "autoprefixer": "10.4.20",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3",
+    "png-to-ico": "^3.0.1",
+    "postcss": "8.4.49",
+    "tailwindcss": "3.4.16",
+    "typescript": "5.6.3",
+    "wait-on": "^7.2.0"
+  }
+}
