@@ -122,14 +122,14 @@ export default function Home() {
       </header>
 
       {/* ============================================================
-          2. HERO SECTION & CORE APPLICATION FLOW
+          2. HERO SECTION & APPLICATION ACTIONS
       ============================================================ */}
       <main className="max-w-3xl mx-auto text-center my-auto py-6 sm:py-9 w-full">
         
         {/* Initiative Pill */}
         <div className="inline-flex items-center gap-2 rounded-full bg-indigo-500/10 px-3.5 py-1 text-[11px] font-bold text-indigo-300 ring-1 ring-indigo-500/30 mb-3 shadow-sm">
           <Sparkles className="h-3.5 w-3.5 text-orange-400" />
-          <span>Odisha's Dedicated Digital Platform for Teachers</span>
+          <span>Odisha&apos;s Dedicated Digital Platform for Teachers</span>
         </div>
 
         {/* Vision Headline */}
@@ -196,9 +196,51 @@ export default function Home() {
         </div>
 
         {/* ============================================================
-            DIGNIFIED MEMORIAL DEDICATION: LATE CHARUMANI PARIDA
+            3. INSTITUTIONAL CREDIBILITY & REGISTERED OFFICE CARD
+            (Directly below login / WhatsApp buttons)
         ============================================================ */}
-        <div className="mt-6 max-w-xl mx-auto rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-white/[0.04] to-amber-500/10 p-3.5 sm:p-4 backdrop-blur-md shadow-lg shadow-black/25 text-left">
+        <div className="mt-6 max-w-xl mx-auto rounded-2xl border border-white/15 bg-white/[0.04] p-4 backdrop-blur-md shadow-xl text-center space-y-3">
+          <div>
+            <h3 className="text-sm sm:text-base font-black text-white tracking-tight">
+              OdishaTeachers<span className="text-orange-500">.com</span>
+            </h3>
+            <p className="text-slate-300 text-[11px] sm:text-xs mt-0.5 font-medium">
+              An Initiative of <span className="text-indigo-300 font-bold">APNSIR Foundation</span> (A Registered Section 8 Non-Profit Company)
+            </p>
+          </div>
+
+          {/* Statutory Verification Badges */}
+          <div className="flex flex-wrap items-center justify-center gap-2 text-[10px] sm:text-[11px]">
+            <span className="inline-flex items-center gap-1 rounded-lg border border-indigo-400/20 bg-indigo-500/10 px-2.5 py-1 text-slate-300">
+              <Building2 className="h-3 w-3 text-indigo-400 shrink-0" />
+              <span className="text-slate-400">CIN:</span>
+              <span className="font-mono font-bold text-white">U85500OD2024NPL046895</span>
+            </span>
+
+            <span className="inline-flex items-center gap-1 rounded-lg border border-indigo-400/20 bg-indigo-500/10 px-2.5 py-1 text-slate-300">
+              <Award className="h-3 w-3 text-indigo-400 shrink-0" />
+              <span className="text-slate-400">Licence:</span>
+              <span className="font-mono font-bold text-white">160609</span>
+            </span>
+
+            <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-emerald-300 font-semibold">
+              <ShieldCheck className="h-3 w-3 text-emerald-400 shrink-0" />
+              <span>12AB &amp; 80G Registered NGO</span>
+            </span>
+          </div>
+
+          {/* Registered Corporate Address */}
+          <div className="pt-2 border-t border-white/10 flex items-center justify-center gap-1.5 text-slate-400 text-[11px]">
+            <MapPin className="h-3.5 w-3.5 text-orange-400 shrink-0" />
+            <span className="leading-snug">{corporateAddress}</span>
+          </div>
+        </div>
+
+        {/* ============================================================
+            4. DIGNIFIED MEMORIAL DEDICATION: LATE CHARUMANI PARIDA
+            (Placed at the bottom below institutional details)
+        ============================================================ */}
+        <div className="mt-4 max-w-xl mx-auto rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-white/[0.04] to-amber-500/10 p-3.5 sm:p-4 backdrop-blur-md shadow-lg shadow-black/25 text-left">
           <div className="flex items-center gap-3.5 sm:gap-4">
             
             {/* Framed Memorial Portrait */}
@@ -231,7 +273,7 @@ export default function Home() {
       </main>
 
       {/* ============================================================
-          3. SIGN IN MODAL FOR RETURNING TEACHERS
+          5. SIGN IN MODAL FOR RETURNING TEACHERS
       ============================================================ */}
       {showSignInModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md animate-fade-in">
@@ -308,57 +350,10 @@ export default function Home() {
       )}
 
       {/* ============================================================
-          4. FOOTER: DIGNIFIED & LEGALLY COHERENT
+          6. CLEAN COPYRIGHT FOOTER
       ============================================================ */}
-      <footer className="max-w-4xl mx-auto w-full pt-5 pb-3 border-t border-white/10 text-xs text-slate-400">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
-          
-          {/* Entity Identification & Direct Credentials */}
-          <div className="space-y-1.5">
-            <p className="text-white font-bold tracking-wide text-sm">
-              OdishaTeachers<span className="text-orange-500">.com</span>
-            </p>
-            
-            <p className="text-slate-300 text-[11px]">
-              An Initiative of <span className="text-indigo-300 font-bold">APNSIR Foundation</span> (A Registered Section 8 Non-Profit Company)
-            </p>
-
-            {/* Statutory credentials directly anchored to APNSIR Foundation */}
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-2.5 gap-y-1 text-[10px] text-slate-400">
-              <span className="inline-flex items-center gap-1">
-                <Building2 className="h-3 w-3 text-indigo-400 shrink-0" />
-                <span>CIN:</span>
-                <span className="font-mono text-slate-200">U85500OD2024NPL046895</span>
-              </span>
-
-              <span className="text-white/20">&bull;</span>
-
-              <span className="inline-flex items-center gap-1">
-                <Award className="h-3 w-3 text-indigo-400 shrink-0" />
-                <span>Licence:</span>
-                <span className="font-mono text-slate-200">160609</span>
-              </span>
-
-              <span className="text-white/20">&bull;</span>
-
-              <span className="inline-flex items-center gap-1">
-                <ShieldCheck className="h-3 w-3 text-emerald-400 shrink-0" />
-                <span className="font-medium text-emerald-300">12AB &amp; 80G Registered NGO</span>
-              </span>
-            </div>
-
-            <p className="text-slate-500 text-[10px] pt-0.5">
-              &copy; {new Date().getFullYear()} APNSIR Foundation. All rights reserved.
-            </p>
-          </div>
-
-          {/* Registered Corporate Address */}
-          <div className="flex items-start md:items-center gap-1.5 text-slate-300 max-w-xs text-center md:text-right shrink-0">
-            <MapPin className="h-3.5 w-3.5 text-orange-400 shrink-0 mt-0.5 md:mt-0" />
-            <span className="text-[11px] leading-snug">{corporateAddress}</span>
-          </div>
-
-        </div>
+      <footer className="max-w-4xl mx-auto w-full pt-4 pb-2 border-t border-white/10 text-center text-[11px] text-slate-500">
+        <p>&copy; {new Date().getFullYear()} APNSIR Foundation. All rights reserved.</p>
       </footer>
 
     </div>
