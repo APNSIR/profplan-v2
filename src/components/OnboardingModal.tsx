@@ -2,7 +2,6 @@
 
 import React, {
     useEffect,
-    useMemo,
     useState,
     useRef,
 } from 'react';
@@ -13,16 +12,16 @@ import {
     ArrowLeft,
     ArrowRight,
     BookOpen,
+    Check,
     CheckCircle2,
-    ChevronRight,
     CircleHelp,
     GraduationCap,
-    Layers3,
-    MessageCircle,
-    Minus,
+    Info,
+    Pencil,
     Plus,
     RotateCcw,
     ShieldCheck,
+    Sparkles,
     Trash2,
     UserCheck,
     Users,
@@ -47,11 +46,8 @@ import type {
 
 
 /* ============================================================
-   CONSTANTS & CONFIGURATION
+   CONSTANTS & ODISHA TIER CONFIGURATION
 ============================================================ */
-
-const WHATSAPP_COMMUNITY_URL =
-    'https://chat.whatsapp.com/Gkm703nk0tzEojU0wol0pX?s=cl&p=i&mlu=4&ilr=4';
 
 const EMPTY_PROFILE: UserProfile = {
     name: '',
@@ -64,26 +60,71 @@ const EMPTY_PROFILE: UserProfile = {
     onboarded: false,
 };
 
-const DRAFT_KEY = 'profplan_onboarding_draft_v3';
+const DRAFT_KEY = 'profplan_onboarding_draft_v6';
 
-const MAX_CLASSES = 20;
-const MAX_SUBJECTS = 20;
-const MAX_UNITS = 20;
+type TierId = 'primary' | 'upper_primary' | 'secondary' | 'higher_secondary' | 'ug' | 'pg';
 
+interface TierOption {
+    id: TierId;
+    title: string;
+    subtitle: string;
+    badge: string;
+    classes: string[];
+}
 
-/* ============================================================
-   TYPES
-============================================================ */
+const ODISHA_TIERS: TierOption[] = [
+    {
+        id: 'primary',
+        title: 'Primary School Level',
+        subtitle: 'Class I to Class V (Foundational)',
+        badge: 'Classes 1–5',
+        classes: ['Class I', 'Class II', 'Class III', 'Class IV', 'Class V'],
+    },
+    {
+        id: 'upper_primary',
+        title: 'Upper Primary (ME Level)',
+        subtitle: 'Class VI to Class VIII (Middle School)',
+        badge: 'Classes 6–8',
+        classes: ['Class VI', 'Class VII', 'Class VIII'],
+    },
+    {
+        id: 'secondary',
+        title: 'Secondary / High School',
+        subtitle: 'Class IX & Class X (BSE Odisha / CBSE / ICSE)',
+        badge: 'Classes 9–10',
+        classes: ['Class IX', 'Class X'],
+    },
+    {
+        id: 'higher_secondary',
+        title: 'Higher Secondary / +2 Junior College',
+        subtitle: '+2 1st Year (XI) & +2 2nd Year (XII) — Arts, Science, Commerce, Vocational',
+        badge: '+2 Stream',
+        classes: ['+2 1st Year (XI)', '+2 2nd Year (XII)'],
+    },
+    {
+        id: 'ug',
+        title: 'Undergraduate (UG Degree College)',
+        subtitle: 'CBCS 3-Year / 4-Year Honors & Elective Semesters',
+        badge: 'Sem 1–6/8',
+        classes: [
+            'UG Semester 1',
+            'UG Semester 2',
+            'UG Semester 3',
+            'UG Semester 4',
+            'UG Semester 5',
+            'UG Semester 6',
+        ],
+    },
+    {
+        id: 'pg',
+        title: 'Postgraduate (University / Autonomous)',
+        subtitle: '2-Year Masters Degree (Semesters 1 to 4)',
+        badge: 'PG Sem 1–4',
+        classes: ['PG Semester 1', 'PG Semester 2', 'PG Semester 3', 'PG Semester 4'],
+    },
+];
 
-type WizardStep = 0 | 1 | 2 | 3 | 4 | 5;
-
-type DraftState = {
-    step: WizardStep;
-    profile: UserProfile;
-    classNames: string[];
-    subjectsByClass: string[][];
-    unitsBySubject: string[][][];
-};
+type WizardStep = 1 | 2 | 3;
 
 
 /* ============================================================
@@ -91,13 +132,9 @@ type DraftState = {
 ============================================================ */
 
 function createId(prefix: string): string {
-    if (
-        typeof crypto !== 'undefined' &&
-        typeof crypto.randomUUID === 'function'
-    ) {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
         return `${prefix}_${crypto.randomUUID()}`;
     }
-
     return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
@@ -118,35 +155,35 @@ export default function OnboardingModal({
     const router = useRouter();
 
     const [isOpen, setIsOpen] = useState(false);
-    const [step, setStep] = useState<WizardStep>(0);
+    const [step, setStep] = useState<WizardStep>(1);
     const [profile, setProfile] = useState<UserProfile>(EMPTY_PROFILE);
 
-    // Dynamic additive state
-    const [classNames, setClassNames] = useState<string[]>([]);
-    const [subjectsByClass, setSubjectsByClass] = useState<string[][]>([]);
-    const [unitsBySubject, setUnitsBySubject] = useState<string[][][]>([]);
+    // Selected tiers (multi-select for composite institutions)
+    const [selectedTiers, setSelectedTiers] = useState<TierId[]>(['ug']);
 
-    // Temporary input buffers for active row
-    const [newClassName, setNewClassName] = useState('');
-    const [newSubjectName, setNewSubjectName] = useState<{ [classIdx: number]: string }>({});
-    const [newUnitName, setNewUnitName] = useState<{ [key: string]: string }>({});
+    // Populated classes
+    const [assignedClasses, setAssignedClasses] = useState<string[]>([]);
+    const [customClassInput, setCustomClassInput] = useState('');
+
+    // Inline edit state
+    const [editingIndex, setEditingIndex] = useState<number | null>(null);
+    const [editingValue, setEditingValue] = useState('');
 
     const [saving, setSaving] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
-    const [draftAvailable, setDraftAvailable] = useState(false);
 
-    const classInputRef = useRef<HTMLInputElement | null>(null);
+    const customInputRef = useRef<HTMLInputElement | null>(null);
+    const editInputRef = useRef<HTMLInputElement | null>(null);
 
 
     /* ========================================================
-       INITIAL LOAD
+       INITIAL LOAD & PERSISTENCE
     ======================================================== */
 
     useEffect(() => {
         const checkProfile = () => {
             try {
                 const savedProfile = loadProfile();
-
                 if (savedProfile?.onboarded === true) {
                     setProfile(savedProfile);
                     setIsOpen(false);
@@ -156,23 +193,23 @@ export default function OnboardingModal({
                 setProfile(savedProfile || EMPTY_PROFILE);
 
                 try {
-                    const savedDraft = window.localStorage.getItem(DRAFT_KEY);
-                    if (savedDraft) {
-                        const parsed = JSON.parse(savedDraft) as Partial<DraftState>;
-                        if (parsed && Array.isArray(parsed.classNames) && parsed.classNames.length > 0) {
-                            setDraftAvailable(true);
-                        }
+                    const draftRaw = window.localStorage.getItem(DRAFT_KEY);
+                    if (draftRaw) {
+                        const parsed = JSON.parse(draftRaw);
+                        if (parsed.profile) setProfile((p) => ({ ...p, ...parsed.profile }));
+                        if (Array.isArray(parsed.selectedTiers)) setSelectedTiers(parsed.selectedTiers);
+                        if (Array.isArray(parsed.assignedClasses)) setAssignedClasses(parsed.assignedClasses);
                     }
                 } catch {
-                    setDraftAvailable(false);
+                    // Ignore draft load errors
                 }
 
-                setStep(0);
+                setStep(1);
                 setIsOpen(true);
             } catch (error) {
-                console.error('ProfPlan onboarding load error:', error);
+                console.error('ProfPlan load error:', error);
                 setProfile(EMPTY_PROFILE);
-                setStep(0);
+                setStep(1);
                 setIsOpen(true);
             }
         };
@@ -181,299 +218,142 @@ export default function OnboardingModal({
 
         const handleProfileChange = () => checkProfile();
         window.addEventListener('profplan-profile-change', handleProfileChange);
-
-        return () => {
-            window.removeEventListener('profplan-profile-change', handleProfileChange);
-        };
+        return () => window.removeEventListener('profplan-profile-change', handleProfileChange);
     }, []);
-
-
-    /* ========================================================
-       DRAFT PERSISTENCE
-    ======================================================== */
 
     useEffect(() => {
         if (!isOpen) return;
-
-        if (step === 0 && !profile.name.trim() && classNames.length === 0) {
-            return;
-        }
-
         try {
-            const draft: DraftState = {
-                step,
-                profile,
-                classNames,
-                subjectsByClass,
-                unitsBySubject,
-            };
-
-            window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-        } catch (error) {
-            console.warn('ProfPlan: unable to save onboarding draft.', error);
+            window.localStorage.setItem(
+                DRAFT_KEY,
+                JSON.stringify({
+                    profile,
+                    selectedTiers,
+                    assignedClasses,
+                })
+            );
+        } catch {
+            // Storage quota handled gracefully
         }
-    }, [isOpen, step, profile, classNames, subjectsByClass, unitsBySubject]);
+    }, [isOpen, profile, selectedTiers, assignedClasses]);
+
+    useEffect(() => {
+        if (editingIndex !== null) {
+            editInputRef.current?.focus();
+            editInputRef.current?.select();
+        }
+    }, [editingIndex]);
 
 
     /* ========================================================
-       PROFILE MANAGEMENT
+       PROFILE & TIER HANDLERS
     ======================================================== */
 
     const updateProfile = (field: keyof UserProfile, value: string) => {
-        setProfile((previous) => ({
-            ...previous,
-            [field]: value,
-        }));
+        setProfile((prev) => ({ ...prev, [field]: value }));
         setErrorMessage('');
     };
 
-    const saveCurrentProfile = () => {
-        const updatedProfile: UserProfile = {
-            ...profile,
-            name: cleanText(profile.name),
-            designation: cleanText(profile.designation),
-            mobile: cleanText(profile.mobile),
-            email: cleanText(profile.email),
-            institutionType: cleanText(profile.institutionType),
-            college: cleanText(profile.college),
-            department: cleanText(profile.department),
-            onboarded: false,
-        };
+    const toggleTier = (id: TierId) => {
+        setSelectedTiers((prev) =>
+            prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
+        );
+        setErrorMessage('');
+    };
 
-        saveProfile(updatedProfile);
-        setProfile(updatedProfile);
+    const buildClassesFromTiers = () => {
+        if (selectedTiers.length === 0) {
+            setErrorMessage('Please select at least one educational level you teach.');
+            return;
+        }
+
+        const generated: string[] = [];
+        ODISHA_TIERS.forEach((tier) => {
+            if (selectedTiers.includes(tier.id)) {
+                generated.push(...tier.classes);
+            }
+        });
+
+        setAssignedClasses(Array.from(new Set(generated)));
+        setEditingIndex(null);
+        setErrorMessage('');
+        setStep(3);
     };
 
 
     /* ========================================================
-       DYNAMIC BUILDERS
+       CLASS EDITING & MANAGEMENT (STEP 3)
     ======================================================== */
 
-    const addClassItem = () => {
-        const trimmed = cleanText(newClassName);
+    const startEditing = (index: number) => {
+        setEditingIndex(index);
+        setEditingValue(assignedClasses[index] || '');
+        setErrorMessage('');
+    };
+
+    const saveEditing = (index: number) => {
+        const trimmed = cleanText(editingValue);
+        if (!trimmed) {
+            setErrorMessage('Class name cannot be empty.');
+            return;
+        }
+
+        const duplicate = assignedClasses.some(
+            (c, i) => i !== index && c.toLowerCase() === trimmed.toLowerCase()
+        );
+        if (duplicate) {
+            setErrorMessage(`"${trimmed}" already exists in your list.`);
+            return;
+        }
+
+        setAssignedClasses((prev) => {
+            const next = [...prev];
+            next[index] = trimmed;
+            return next;
+        });
+        setEditingIndex(null);
+        setEditingValue('');
+        setErrorMessage('');
+    };
+
+    const cancelEditing = () => {
+        setEditingIndex(null);
+        setEditingValue('');
+        setErrorMessage('');
+    };
+
+    const removeClass = (index: number) => {
+        if (editingIndex === index) {
+            cancelEditing();
+        }
+        setAssignedClasses((prev) => prev.filter((_, i) => i !== index));
+    };
+
+    const addCustomClass = () => {
+        const trimmed = cleanText(customClassInput);
         if (!trimmed) return;
 
-        if (classNames.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
-            setErrorMessage(`"${trimmed}" has already been added.`);
+        if (assignedClasses.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+            setErrorMessage(`"${trimmed}" is already on your list.`);
             return;
         }
 
-        if (classNames.length >= MAX_CLASSES) return;
-
-        setClassNames((prev) => [...prev, trimmed]);
-        setSubjectsByClass((prev) => [...prev, []]);
-        setUnitsBySubject((prev) => [...prev, []]);
-        setNewClassName('');
+        setAssignedClasses((prev) => [...prev, trimmed]);
+        setCustomClassInput('');
         setErrorMessage('');
-
-        setTimeout(() => {
-            classInputRef.current?.focus();
-        }, 50);
+        setTimeout(() => customInputRef.current?.focus(), 40);
     };
 
-    const removeClassItem = (index: number) => {
-        setClassNames((prev) => prev.filter((_, i) => i !== index));
-        setSubjectsByClass((prev) => prev.filter((_, i) => i !== index));
-        setUnitsBySubject((prev) => prev.filter((_, i) => i !== index));
-    };
-
-    const clearAllClasses = () => {
-        if (confirm('Clear all listed classes to start your own list?')) {
-            setClassNames([]);
-            setSubjectsByClass([]);
-            setUnitsBySubject([]);
-        }
-    };
-
-    const addSubjectItem = (classIndex: number) => {
-        const subName = cleanText(newSubjectName[classIndex] || '');
-        if (!subName) return;
-
-        const currentSubs = subjectsByClass[classIndex] || [];
-        if (currentSubs.some((s) => s.toLowerCase() === subName.toLowerCase())) {
-            setErrorMessage(`"${subName}" is already added to this group.`);
-            return;
-        }
-
-        if (currentSubs.length >= MAX_SUBJECTS) return;
-
-        setSubjectsByClass((prev) => {
-            const updated = prev.map((arr) => [...arr]);
-            if (!updated[classIndex]) updated[classIndex] = [];
-            updated[classIndex].push(subName);
-            return updated;
+    const resetClassesFromTiers = () => {
+        const generated: string[] = [];
+        ODISHA_TIERS.forEach((tier) => {
+            if (selectedTiers.includes(tier.id)) {
+                generated.push(...tier.classes);
+            }
         });
-
-        setUnitsBySubject((prev) => {
-            const updated = prev.map((classArr) => classArr.map((unitArr) => [...unitArr]));
-            if (!updated[classIndex]) updated[classIndex] = [];
-            updated[classIndex].push([]);
-            return updated;
-        });
-
-        setNewSubjectName((prev) => ({ ...prev, [classIndex]: '' }));
+        setAssignedClasses(Array.from(new Set(generated)));
+        setEditingIndex(null);
         setErrorMessage('');
-    };
-
-    const removeSubjectItem = (classIndex: number, subjectIndex: number) => {
-        setSubjectsByClass((prev) => {
-            const updated = prev.map((arr) => [...arr]);
-            if (updated[classIndex]) {
-                updated[classIndex] = updated[classIndex].filter((_, i) => i !== subjectIndex);
-            }
-            return updated;
-        });
-
-        setUnitsBySubject((prev) => {
-            const updated = prev.map((classArr) => classArr.map((unitArr) => [...unitArr]));
-            if (updated[classIndex]) {
-                updated[classIndex] = updated[classIndex].filter((_, i) => i !== subjectIndex);
-            }
-            return updated;
-        });
-    };
-
-    const addUnitItem = (classIndex: number, subjectIndex: number) => {
-        const key = `${classIndex}-${subjectIndex}`;
-        const unitName = cleanText(newUnitName[key] || '');
-        if (!unitName) return;
-
-        const currentUnits = unitsBySubject[classIndex]?.[subjectIndex] || [];
-        if (currentUnits.some((u) => u.toLowerCase() === unitName.toLowerCase())) {
-            setErrorMessage(`"${unitName}" is already added to this subject.`);
-            return;
-        }
-
-        if (currentUnits.length >= MAX_UNITS) return;
-
-        setUnitsBySubject((prev) => {
-            const updated = prev.map((classArr) => classArr.map((unitArr) => [...unitArr]));
-            if (!updated[classIndex]) updated[classIndex] = [];
-            if (!updated[classIndex][subjectIndex]) updated[classIndex][subjectIndex] = [];
-            updated[classIndex][subjectIndex].push(unitName);
-            return updated;
-        });
-
-        setNewUnitName((prev) => ({ ...prev, [key]: '' }));
-        setErrorMessage('');
-    };
-
-    const removeUnitItem = (classIndex: number, subjectIndex: number, unitIndex: number) => {
-        setUnitsBySubject((prev) => {
-            const updated = prev.map((classArr) => classArr.map((unitArr) => [...unitArr]));
-            if (updated[classIndex]?.[subjectIndex]) {
-                updated[classIndex][subjectIndex] = updated[classIndex][subjectIndex].filter((_, i) => i !== unitIndex);
-            }
-            return updated;
-        });
-    };
-
-
-    /* ========================================================
-       TEMPLATE
-    ======================================================== */
-
-    const loadOdishaUGTemplate = () => {
-        const semesters = [
-            'Semester 1',
-            'Semester 2',
-            'Semester 3',
-            'Semester 4',
-            'Semester 5',
-            'Semester 6',
-        ];
-
-        const subjects = semesters.map(() => [
-            'Major Paper',
-            'Minor Paper',
-            'Multidisciplinary / AEC',
-            'SEC / VAC',
-        ]);
-
-        const units = subjects.map((classSubjects) =>
-            classSubjects.map(() => [
-                'Unit 1',
-                'Unit 2',
-                'Unit 3',
-                'Unit 4',
-            ])
-        );
-
-        setClassNames(semesters);
-        setSubjectsByClass(subjects);
-        setUnitsBySubject(units);
-        setErrorMessage('');
-
-        if (!profile.name.trim() || !profile.mobile.trim()) {
-            setStep(1);
-            setErrorMessage('Please provide your name and phone number to complete the setup.');
-        } else {
-            setStep(5);
-        }
-    };
-
-
-    /* ========================================================
-       RESUME & DISCARD DRAFT
-    ======================================================== */
-
-    const resumeDraft = () => {
-        try {
-            const raw = window.localStorage.getItem(DRAFT_KEY);
-            if (!raw) {
-                setDraftAvailable(false);
-                return;
-            }
-
-            const draft = JSON.parse(raw) as DraftState;
-
-            if (draft.profile) {
-                setProfile({
-                    ...EMPTY_PROFILE,
-                    ...draft.profile,
-                    onboarded: false,
-                });
-            }
-
-            if (Array.isArray(draft.classNames) && draft.classNames.length) {
-                setClassNames(draft.classNames);
-            }
-
-            if (Array.isArray(draft.subjectsByClass)) {
-                setSubjectsByClass(draft.subjectsByClass);
-            }
-
-            if (Array.isArray(draft.unitsBySubject)) {
-                setUnitsBySubject(draft.unitsBySubject);
-            }
-
-            const restoredStep = Number(draft.step);
-            if (restoredStep >= 0 && restoredStep <= 5) {
-                setStep(restoredStep as WizardStep);
-            } else {
-                setStep(0);
-            }
-
-            setDraftAvailable(false);
-            setErrorMessage('');
-        } catch (error) {
-            console.error('Unable to restore draft:', error);
-            setDraftAvailable(false);
-        }
-    };
-
-    const discardDraft = () => {
-        try {
-            window.localStorage.removeItem(DRAFT_KEY);
-        } catch {
-            // Ignore
-        }
-        setDraftAvailable(false);
-        setProfile(EMPTY_PROFILE);
-        setClassNames([]);
-        setSubjectsByClass([]);
-        setUnitsBySubject([]);
-        setStep(0);
     };
 
 
@@ -481,149 +361,97 @@ export default function OnboardingModal({
        NAVIGATION & VALIDATION
     ======================================================== */
 
-    const goToProfile = () => {
-        setErrorMessage('');
-        setStep(1);
-    };
-
-    const goToClasses = () => {
+    const goToStep2 = () => {
         if (!profile.name.trim()) {
             setErrorMessage('Please enter your full name.');
             return;
         }
 
-        const phoneClean = profile.mobile.replace(/\D/g, '');
-        if (!phoneClean || phoneClean.length < 10) {
-            setErrorMessage('Please provide a valid 10-digit phone or WhatsApp number.');
+        const cleanPhone = profile.mobile.replace(/\D/g, '');
+        if (!cleanPhone || cleanPhone.length < 10) {
+            setErrorMessage('Please enter a valid 10-digit phone or WhatsApp number.');
             return;
         }
 
-        saveCurrentProfile();
+        const cleanProfile: UserProfile = {
+            ...profile,
+            name: cleanText(profile.name),
+            designation: cleanText(profile.designation),
+            mobile: cleanPhone,
+            college: cleanText(profile.college),
+            department: cleanText(profile.department),
+            onboarded: false,
+        };
+        saveProfile(cleanProfile);
+        setProfile(cleanProfile);
+
         setErrorMessage('');
         setStep(2);
     };
 
-    const goToSubjects = () => {
-        if (classNames.length === 0) {
-            setErrorMessage('Please add at least one class or semester.');
-            return;
-        }
-        setErrorMessage('');
-        setStep(3);
-    };
-
-    const goToUnits = () => {
-        const missingSub = subjectsByClass.findIndex((subs) => !subs || subs.length === 0);
-        if (missingSub !== -1) {
-            setErrorMessage(`Please add at least one subject for "${classNames[missingSub]}".`);
-            return;
-        }
-        setErrorMessage('');
-        setStep(4);
-    };
-
-    const goToReview = () => {
-        setErrorMessage('');
-        setStep(5);
-    };
-
     const goBack = () => {
+        setEditingIndex(null);
         setErrorMessage('');
-        setStep((prev) => Math.max(0, prev - 1) as WizardStep);
+        setStep((prev) => Math.max(1, prev - 1) as WizardStep);
     };
 
 
     /* ========================================================
-       COUNTS
+       FINAL SAVE (SUPABASE + LOCAL STORAGE)
     ======================================================== */
 
-    const classCount = classNames.length;
-
-    const subjectCount = useMemo(
-        () => subjectsByClass.reduce((acc, subs) => acc + (subs?.length || 0), 0),
-        [subjectsByClass]
-    );
-
-    const unitCount = useMemo(
-        () => unitsBySubject.reduce((acc, cUnits) => acc + cUnits.reduce((sAcc, uArr) => sAcc + (uArr?.length || 0), 0), 0),
-        [unitsBySubject]
-    );
-
-
-    /* ========================================================
-       FINAL SAVE (SUPABASE + LOCAL SYNC)
-    ======================================================== */
-
-    const finishSyllabusAndOpenTimetable = async () => {
+    const completeSetup = async () => {
         if (saving) return;
+
+        if (assignedClasses.length === 0) {
+            setErrorMessage('Please keep or add at least one class you teach.');
+            return;
+        }
+
         setSaving(true);
         setErrorMessage('');
 
         try {
-            if (!profile.name.trim()) {
-                setStep(1);
-                throw new Error('Please enter your full name.');
-            }
-
-            const phoneClean = profile.mobile.replace(/\D/g, '');
-            if (!phoneClean || phoneClean.length < 10) {
-                setStep(1);
-                throw new Error('Please provide a valid 10-digit phone or WhatsApp number.');
-            }
-
-            if (classNames.length === 0) {
-                setStep(2);
-                throw new Error('Please add at least one class or semester.');
-            }
-
+            const cleanPhone = profile.mobile.replace(/\D/g, '');
             const completedProfile: UserProfile = {
                 ...profile,
                 name: cleanText(profile.name),
                 designation: cleanText(profile.designation),
-                mobile: phoneClean,
-                email: cleanText(profile.email),
-                institutionType: cleanText(profile.institutionType),
+                mobile: cleanPhone,
                 college: cleanText(profile.college),
                 department: cleanText(profile.department),
                 onboarded: true,
             };
 
-            // 1. SAVE DIRECTLY TO SUPABASE BACKEND
+            // 1. Supabase Sync
             if (supabase) {
                 try {
-                    const { error: dbError } = await supabase
-                        .from('profiles')
-                        .upsert(
-                            {
-                                full_name: completedProfile.name,
-                                phone: completedProfile.mobile,
-                                school_name: completedProfile.college,
-                                designation: completedProfile.designation,
-                                department: completedProfile.department,
-                                email: completedProfile.email || null,
-                                updated_at: new Date().toISOString(),
-                            },
-                            { onConflict: 'phone' }
-                        );
-
-                    if (dbError) {
-                        console.warn('Supabase profile sync notice:', dbError.message);
-                    }
-                } catch (supabaseErr) {
-                    console.warn('Supabase network dispatch error:', supabaseErr);
+                    await supabase.from('profiles').upsert(
+                        {
+                            full_name: completedProfile.name,
+                            phone: completedProfile.mobile,
+                            school_name: completedProfile.college,
+                            designation: completedProfile.designation,
+                            department: completedProfile.department,
+                            updated_at: new Date().toISOString(),
+                        },
+                        { onConflict: 'phone' }
+                    );
+                } catch (dbErr) {
+                    console.warn('Supabase sync note:', dbErr);
                 }
             }
 
-            // 2. CONSTRUCT SYLLABUS RECORDS FOR LOCAL WORKSPACE
-            const data = load();
+            // 2. Local State Assembly
+            const storeData = load();
 
-            const existingClasses = (data.classes || []).filter(
+            const existingClasses = (storeData.classes || []).filter(
                 (item: ClassItem) => !String(item.id || '').startsWith('class_setup_')
             );
-            const existingCourses = (data.courses || []).filter(
+            const existingCourses = (storeData.courses || []).filter(
                 (course: Course) => !String(course.id || '').startsWith('course_setup_')
             );
-            const existingUnits = (data.units || []).filter(
+            const existingUnits = (storeData.units || []).filter(
                 (unit: Unit) => !String(unit.id || '').startsWith('unit_setup_')
             );
 
@@ -631,45 +459,42 @@ export default function OnboardingModal({
             const newCourses: Course[] = [];
             const newUnits: Unit[] = [];
 
-            classNames.forEach((className, classIndex) => {
+            const deptName = completedProfile.department || 'Primary Subject';
+
+            assignedClasses.forEach((cName, idx) => {
                 const classId = createId('class_setup');
-                newClasses.push({ id: classId, name: className });
+                newClasses.push({ id: classId, name: cName });
 
-                const subjects = subjectsByClass[classIndex] || [];
-                subjects.forEach((subjectName, subjectIndex) => {
-                    const courseId = createId('course_setup');
-                    newCourses.push({
-                        id: courseId,
-                        name: subjectName,
-                        code: `SUB-${classIndex + 1}-${subjectIndex + 1}`,
-                        semester: className,
-                        department: profile.department || 'General',
-                        hours: 45,
-                        targetHours: 45,
-                        classId,
-                    } as Course);
+                const courseId = createId('course_setup');
+                newCourses.push({
+                    id: courseId,
+                    name: `${deptName} (Paper ${idx + 1})`,
+                    code: `P-${idx + 1}`,
+                    semester: cName,
+                    department: deptName,
+                    hours: 45,
+                    targetHours: 45,
+                    classId,
+                } as Course);
 
-                    const units = unitsBySubject[classIndex]?.[subjectIndex] || [];
-                    units.forEach((unitName, unitIndex) => {
-                        newUnits.push({
-                            id: createId('unit_setup'),
-                            courseId,
-                            name: unitName,
-                            unitNumber: unitIndex + 1,
-                            order: unitIndex,
-                        } as Unit);
-                    });
+                ['Unit 1', 'Unit 2', 'Unit 3', 'Unit 4'].forEach((uName, uIdx) => {
+                    newUnits.push({
+                        id: createId('unit_setup'),
+                        courseId,
+                        name: uName,
+                        unitNumber: uIdx + 1,
+                        order: uIdx,
+                    } as Unit);
                 });
             });
 
             save({
-                ...data,
+                ...storeData,
                 classes: [...existingClasses, ...newClasses],
                 courses: [...existingCourses, ...newCourses],
                 units: [...existingUnits, ...newUnits],
             });
 
-            // 3. PERSIST COMPLETED STATE LOCALLY
             saveProfile(completedProfile);
 
             try {
@@ -682,18 +507,16 @@ export default function OnboardingModal({
             setIsOpen(false);
             onComplete?.(completedProfile);
             router.replace('/timetable?setup=1');
-        } catch (error) {
-            console.error('ProfPlan syllabus setup error:', error);
-            setErrorMessage(
-                error instanceof Error ? error.message : 'Unable to save your syllabus. Please try again.'
-            );
+        } catch (err) {
+            console.error('ProfPlan finish error:', err);
+            setErrorMessage(err instanceof Error ? err.message : 'Unable to complete setup.');
             setSaving(false);
         }
     };
 
 
-    const progress = step === 0 ? 0 : Math.round((step / 5) * 100);
-    const stepTitle = ['Welcome', 'Your Profile', 'Classes / Semesters', 'Subjects / Papers', 'Units', 'Review'][step];
+    const stepTitle = ['Teacher Profile', 'Educational Levels', 'Assign & Edit Classes'][step - 1];
+    const progress = Math.round((step / 3) * 100);
 
     if (!isOpen) return null;
 
@@ -703,16 +526,17 @@ export default function OnboardingModal({
             className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 p-3 sm:p-5 backdrop-blur-md animate-fade-in"
             role="dialog"
             aria-modal="true"
-            aria-label="OdishaTeachers.com ProfPlan setup wizard"
+            aria-label="OdishaTeachers.com ProfPlan Setup Wizard"
         >
-            <div className="relative flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-[28px] border border-white/30 bg-white shadow-2xl">
+            <div className="relative flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-[30px] border border-white/40 bg-white shadow-2xl">
+                
                 {/* BRAND HEADER */}
                 <div className="relative shrink-0 overflow-hidden bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 px-5 py-4 text-white">
-                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.30),transparent_45%)]" />
+                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.35),transparent_50%)]" />
 
                     <div className="relative flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 p-2 ring-1 ring-white/20">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 p-1.5 ring-1 ring-white/25 backdrop-blur-sm shadow-inner">
                                 <img
                                     src="/apnsir-logo.png"
                                     alt="APNSIR Foundation"
@@ -724,174 +548,82 @@ export default function OnboardingModal({
                             </div>
 
                             <div className="min-w-0">
-                                <p className="truncate text-[9px] font-black uppercase tracking-[0.18em] text-indigo-300">
-                                    OdishaTeachers.com &bull; APNSIR Foundation
-                                </p>
-                                <p className="truncate text-sm font-bold text-white">
-                                    ProfPlan &bull; LessonPlan & Progress Record
+                                <div className="flex items-center gap-2">
+                                    <span className="truncate text-[9px] font-black uppercase tracking-[0.2em] text-indigo-300">
+                                        OdishaTeachers.com
+                                    </span>
+                                    <span className="rounded-full bg-indigo-500/20 px-1.5 py-0.5 text-[8px] font-bold text-indigo-200 ring-1 ring-indigo-400/30">
+                                        APNSIR
+                                    </span>
+                                </div>
+                                <p className="truncate text-sm font-extrabold text-white">
+                                    ProfPlan &bull; LessonPlan &amp; Progress Record
                                 </p>
                             </div>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-2">
-                            <a
-                                href={WHATSAPP_COMMUNITY_URL}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="Join OdishaTeachers WhatsApp Community"
-                                className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-[10px] font-bold text-white shadow-sm hover:bg-emerald-700 transition"
-                            >
-                                <MessageCircle className="h-3.5 w-3.5" />
-                                <span className="hidden sm:inline">WhatsApp Group</span>
-                            </a>
-                            <div className="hidden sm:flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-indigo-100 ring-1 ring-white/10">
-                                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                                <span>Secure</span>
-                            </div>
+                        <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold text-emerald-300 ring-1 ring-emerald-400/30">
+                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                            <span className="hidden sm:inline">Secure Setup</span>
                         </div>
                     </div>
                 </div>
 
-                {/* PROGRESS BAR */}
-                {step > 0 && (
-                    <div className="shrink-0 border-b border-slate-100 bg-white px-5 py-3">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-indigo-600">
-                                Step {step} of 5
+                {/* PROGRESS TRACKER */}
+                <div className="shrink-0 border-b border-slate-100 bg-white px-5 py-3 sm:px-7">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-black text-white">
+                                {step}
                             </span>
-                            <span className="text-[10px] font-bold text-slate-400">{stepTitle}</span>
+                            <span className="text-[11px] font-black uppercase tracking-[0.14em] text-indigo-600">
+                                Step {step} of 3
+                            </span>
                         </div>
-
-                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                            <div
-                                className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 transition-all duration-500"
-                                style={{ width: `${progress}%` }}
-                            />
-                        </div>
+                        <span className="text-xs font-bold text-slate-500">{stepTitle}</span>
                     </div>
-                )}
 
-                {/* CONTENT AREA */}
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                            className="h-full rounded-full bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600 transition-all duration-500"
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
+                </div>
+
+                {/* BODY CONTENT AREA */}
                 <div className="min-h-0 flex-1 overflow-y-auto">
 
-                    {/* STEP 0: WELCOME */}
-                    {step === 0 && (
-                        <div className="px-5 py-7 text-center sm:px-8 sm:py-9">
-                            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-200">
-                                <GraduationCap className="h-8 w-8" />
-                            </div>
-
-                            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">
-                                Welcome to OdishaTeachers.com
-                            </p>
-
-                            <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-                                Let’s set up your teaching plan.
-                            </h1>
-
-                            <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-500">
-                                ProfPlan brings your syllabus, timetable, lesson planning, and class progress together in one unified educator workspace.
-                            </p>
-
-                            <div className="mt-7 space-y-3 text-left">
-                                <button
-                                    type="button"
-                                    onClick={loadOdishaUGTemplate}
-                                    className="group w-full rounded-2xl border-2 border-indigo-200 bg-gradient-to-r from-indigo-50/80 to-violet-50/80 p-4 text-left transition hover:border-indigo-500 hover:bg-indigo-50 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-100"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
-                                            <Layers3 className="h-5 w-5" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">
-                                                Recommended
-                                            </span>
-                                            <h2 className="mt-1 text-sm font-extrabold text-slate-900">
-                                                Start with the Odisha UG Syllabus Template
-                                            </h2>
-                                            <p className="mt-1 text-xs leading-5 text-slate-600">
-                                                A ready-made six-semester structure with Major, Minor, AEC, and SEC / VAC papers. Fully editable at each step.
-                                            </p>
-                                            <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600">
-                                                Use this template <ChevronRight className="h-3.5 w-3.5" />
-                                            </span>
-                                        </div>
-                                    </div>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={goToProfile}
-                                    className="group w-full rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-50/70 to-teal-50/50 p-4 text-left transition hover:border-emerald-500 hover:bg-emerald-50 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-emerald-100"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-200">
-                                            <BookOpen className="h-5 w-5" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">
-                                                Custom Setup
-                                            </span>
-                                            <h2 className="mt-1 text-sm font-extrabold text-slate-900">
-                                                Create My Own Custom Structure
-                                            </h2>
-                                            <p className="mt-1 text-xs leading-5 text-slate-600">
-                                                Enter your own school standards (Class IX, X, +2) or college semesters, subjects, and units from scratch.
-                                            </p>
-                                            <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
-                                                Create my setup <ChevronRight className="h-3.5 w-3.5" />
-                                            </span>
-                                        </div>
-                                    </div>
-                                </button>
-                            </div>
-
-                            {draftAvailable && (
-                                <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left">
-                                    <div className="flex items-start gap-3">
-                                        <CircleHelp className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-xs font-extrabold text-amber-900">
-                                                You have an unfinished setup.
-                                            </p>
-                                            <p className="mt-1 text-[11px] leading-5 text-amber-800">
-                                                Continue where you left off or start a fresh setup.
-                                            </p>
-                                            <div className="mt-3 flex flex-wrap gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={resumeDraft}
-                                                    className="rounded-xl bg-amber-600 px-3 py-2 text-[11px] font-bold text-white shadow-sm hover:bg-amber-700"
-                                                >
-                                                    Continue Setup
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={discardDraft}
-                                                    className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-[11px] font-bold text-amber-800 shadow-sm hover:bg-amber-100/50"
-                                                >
-                                                    Start Fresh
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* STEP 1: PROFILE */}
+                    {/* ========================================================
+                        STEP 1: TEACHER PROFILE
+                    ======================================================== */}
                     {step === 1 && (
                         <div className="px-5 py-6 sm:px-7 sm:py-7">
                             <StepHeading
-                                icon={<UserCheck className="h-5 w-5" />}
-                                eyebrow="Step 1"
-                                title="Tell ProfPlan about yourself."
-                                description="This information personalises your lesson plans and registers your workspace."
+                                icon={<UserCheck className="h-6 w-6" />}
+                                eyebrow="Step 1 of 3"
+                                title="Welcome, Educator! Enter Your Details"
+                                description="Your profile personalises your teaching diary, institutional progress register, and lesson plans."
                             />
 
-                            <div className="mt-6 space-y-4">
+                            {/* HIGHLIGHTED INSTRUCTION CARD */}
+                            <div className="mt-5 rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/90 via-violet-50/50 to-indigo-50/90 p-4 shadow-sm">
+                                <div className="flex items-start gap-3">
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
+                                        <Sparkles className="h-4 w-4" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-black text-indigo-950">
+                                            Instant Personalisation
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-800">
+                                            Your name, institution, and department will be automatically embedded onto every official Lesson Plan, Progress Diary, and Timetable printout.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-5 space-y-4">
                                 <Field label="Full Name" required>
                                     <input
                                         type="text"
@@ -908,26 +640,23 @@ export default function OnboardingModal({
                                         type="tel"
                                         maxLength={10}
                                         value={profile.mobile}
-                                        onChange={(e) => {
-                                            const val = e.target.value.replace(/\D/g, '');
-                                            updateProfile('mobile', val);
-                                        }}
+                                        onChange={(e) => updateProfile('mobile', e.target.value.replace(/\D/g, ''))}
                                         placeholder="e.g. 9861012345"
                                         className={inputClass}
                                     />
                                 </Field>
 
-                                <Field label="Designation">
+                                <Field label="Designation / Post">
                                     <input
                                         type="text"
                                         value={profile.designation}
                                         onChange={(e) => updateProfile('designation', e.target.value)}
-                                        placeholder="e.g. Lecturer / Assistant Professor / Headmaster"
+                                        placeholder="e.g. Lecturer / Assistant Professor / Reader / PGT / Headmaster"
                                         className={inputClass}
                                     />
                                 </Field>
 
-                                <Field label="Institution Name">
+                                <Field label="Institution / College / School Name">
                                     <input
                                         type="text"
                                         value={profile.college}
@@ -937,12 +666,12 @@ export default function OnboardingModal({
                                     />
                                 </Field>
 
-                                <Field label="Department / Subject Area">
+                                <Field label="Subject / Department">
                                     <input
                                         type="text"
                                         value={profile.department}
                                         onChange={(e) => updateProfile('department', e.target.value)}
-                                        placeholder="e.g. Odia, English, Botany, Political Science"
+                                        placeholder="e.g. Odia, English, Botany, Political Science, Physics"
                                         className={inputClass}
                                     />
                                 </Field>
@@ -950,425 +679,286 @@ export default function OnboardingModal({
                         </div>
                     )}
 
-                    {/* STEP 2: CLASSES / SEMESTERS */}
+                    {/* ========================================================
+                        STEP 2: EDUCATIONAL LEVELS
+                    ======================================================== */}
                     {step === 2 && (
                         <div className="px-5 py-6 sm:px-7 sm:py-7">
                             <StepHeading
-                                icon={<Users className="h-5 w-5" />}
-                                eyebrow="Step 2"
-                                title="Which classes or semesters do you teach?"
-                                description="Add, remove, or modify all classes or semesters to fit your schedule."
+                                icon={<GraduationCap className="h-6 w-6" />}
+                                eyebrow="Step 2 of 3"
+                                title="Which Educational Levels Do You Teach?"
+                                description="Select all categories applicable to you. You can choose multiple levels if you teach composite or combined classes."
                             />
 
-                            {/* EDITABILITY NOTICE BANNER */}
-                            <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3.5 text-xs text-indigo-950">
-                                <CircleHelp className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />
-                                <div className="min-w-0 flex-1">
-                                    <p className="font-extrabold text-indigo-900">Customise to your need</p>
-                                    <p className="mt-0.5 leading-5 text-indigo-800">
-                                        These items can be edited freely. Delete unwanted items with the trash button or add school standards (e.g., <em>Class IX, +2 Arts</em>) below.
-                                    </p>
+                            {/* HIGHLIGHTED INSTRUCTION CARD */}
+                            <div className="mt-5 rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/90 via-violet-50/40 to-indigo-50/90 p-4 shadow-sm">
+                                <div className="flex items-start gap-3">
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
+                                        <Info className="h-4 w-4" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-black text-indigo-950">
+                                            Designed for Composite &amp; Standalone Educators
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-800">
+                                            If you teach in a composite college (taking both <strong>+2 Higher Secondary</strong> and <strong>UG Degree</strong> classes), or school taking both <strong>ME and High School</strong>, select all that apply. We will populate them together!
+                                        </p>
+                                    </div>
                                 </div>
-                                {classNames.length > 0 && (
-                                    <button
-                                        type="button"
-                                        onClick={clearAllClasses}
-                                        className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-red-50 hover:text-red-600 transition"
-                                    >
-                                        <RotateCcw className="h-3 w-3" /> Clear All
-                                    </button>
-                                )}
                             </div>
 
-                            <div className="mt-5 space-y-3">
-                                {classNames.length === 0 ? (
-                                    <div className="rounded-2xl border-2 border-dashed border-slate-200 p-6 text-center text-xs font-semibold text-slate-400">
-                                        No classes added yet. Use the field below to add your teaching classes or semesters.
+                            <div className="mt-4 space-y-2.5">
+                                {ODISHA_TIERS.map((tier) => {
+                                    const isSelected = selectedTiers.includes(tier.id);
+                                    return (
+                                        <div
+                                            key={tier.id}
+                                            onClick={() => toggleTier(tier.id)}
+                                            className={`group relative flex items-center justify-between gap-3 rounded-2xl border-2 p-3.5 transition cursor-pointer select-none ${
+                                                isSelected
+                                                    ? 'border-indigo-600 bg-indigo-50/80 shadow-md ring-2 ring-indigo-200/50'
+                                                    : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50/60'
+                                            }`}
+                                        >
+                                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                                                <div
+                                                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border-2 transition ${
+                                                        isSelected
+                                                            ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
+                                                            : 'border-slate-300 bg-white group-hover:border-slate-400'
+                                                    }`}
+                                                >
+                                                    {isSelected && <Check className="h-3.5 w-3.5 stroke-[3]" />}
+                                                </div>
+
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                        <h3 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                                                            {tier.title}
+                                                        </h3>
+                                                        <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-700 ring-1 ring-indigo-200">
+                                                            {tier.badge}
+                                                        </span>
+                                                    </div>
+                                                    <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
+                                                        {tier.subtitle}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <span className="shrink-0 rounded-xl bg-slate-100 px-2.5 py-1 text-[10px] font-extrabold text-slate-600 ring-1 ring-slate-200/80">
+                                                {tier.classes.length} classes
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ========================================================
+                        STEP 3: ASSIGNED CLASSES (WITH INLINE EDIT & DELETE)
+                    ======================================================== */}
+                    {step === 3 && (
+                        <div className="px-5 py-6 sm:px-7 sm:py-7">
+                            <StepHeading
+                                icon={<Users className="h-6 w-6" />}
+                                eyebrow="Step 3 of 3"
+                                title="Your Assigned Academic Groups"
+                                description="Review, customize, or refine the classes you teach before opening your timetable."
+                            />
+
+                            {/* PROMINENT HIGHLIGHT INSTRUCTION CARD */}
+                            <div className="mt-5 rounded-2xl border-2 border-indigo-300 bg-gradient-to-br from-indigo-50 via-violet-50 to-indigo-50 p-4 shadow-sm">
+                                <div className="flex items-start gap-3">
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
+                                        <Sparkles className="h-4 w-4" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-black text-indigo-950">
+                                            We populated these based on your chosen levels!
+                                        </p>
+                                        <p className="mt-1 text-[11px] leading-relaxed text-indigo-900 font-medium">
+                                            Click the <strong className="font-extrabold text-indigo-700">Pencil icon</strong> to add your stream or section (e.g. change <em>&ldquo;+2 1st Year (XI)&rdquo;</em> to <em>&ldquo;+2 1st Year (Science)&rdquo;</em>). Use the <strong className="font-extrabold text-red-700">Trash icon</strong> to remove any class you do not teach.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* CLASS LIST HEADER CONTROLS */}
+                            <div className="mt-4 flex items-center justify-between">
+                                <span className="text-xs font-black text-slate-700">
+                                    {assignedClasses.length} {assignedClasses.length === 1 ? 'Academic Group' : 'Academic Groups'} Configured
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={resetClassesFromTiers}
+                                    className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition"
+                                >
+                                    <RotateCcw className="h-3 w-3" /> Reset to standard
+                                </button>
+                            </div>
+
+                            {/* CLASS CARDS CONTAINER */}
+                            <div className="mt-2.5 max-h-60 overflow-y-auto space-y-2 rounded-2xl border border-slate-200 bg-slate-50/50 p-2.5">
+                                {assignedClasses.length === 0 ? (
+                                    <div className="py-8 text-center text-xs font-semibold text-slate-400">
+                                        No classes remaining. Add your specific class below.
                                     </div>
                                 ) : (
-                                    classNames.map((className, index) => (
-                                        <div
-                                            key={index}
-                                            className="flex items-center justify-between gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-3.5 shadow-sm"
-                                        >
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
-                                                    {index + 1}
-                                                </span>
-                                                <span className="truncate text-sm font-bold text-slate-800">
-                                                    {className}
-                                                </span>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => removeClassItem(index)}
-                                                aria-label={`Remove ${className}`}
-                                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
+                                    assignedClasses.map((className, idx) => {
+                                        const isEditing = editingIndex === idx;
+
+                                        return (
+                                            <div
+                                                key={idx}
+                                                className={`flex items-center justify-between gap-2 rounded-xl p-2.5 transition ${
+                                                    isEditing
+                                                        ? 'bg-indigo-50 border-2 border-indigo-600 shadow-md ring-2 ring-indigo-200'
+                                                        : 'bg-white border border-slate-200 shadow-sm hover:border-indigo-200'
+                                                }`}
                                             >
-                                                <Trash2 className="h-4 w-4" />
-                                            </button>
-                                        </div>
-                                    ))
+                                                {isEditing ? (
+                                                    /* INLINE EDIT MODE */
+                                                    <div className="flex items-center gap-1.5 w-full">
+                                                        <input
+                                                            ref={editInputRef}
+                                                            type="text"
+                                                            value={editingValue}
+                                                            onChange={(e) => setEditingValue(e.target.value)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    e.preventDefault();
+                                                                    saveEditing(idx);
+                                                                } else if (e.key === 'Escape') {
+                                                                    e.preventDefault();
+                                                                    cancelEditing();
+                                                                }
+                                                            }}
+                                                            className="flex-1 rounded-lg border-2 border-indigo-500 bg-white px-3 py-1.5 text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-200"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => saveEditing(idx)}
+                                                            title="Save changes"
+                                                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow hover:bg-emerald-700 transition"
+                                                        >
+                                                            <Check className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={cancelEditing}
+                                                            title="Cancel edit"
+                                                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 transition"
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    /* DISPLAY MODE (EDIT + DELETE ACTION BUTTONS) */
+                                                    <>
+                                                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-[10px] font-black text-indigo-700">
+                                                                {idx + 1}
+                                                            </span>
+                                                            <span className="truncate text-xs sm:text-sm font-bold text-slate-800">
+                                                                {className}
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="flex items-center gap-1 shrink-0">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => startEditing(idx)}
+                                                                title={`Edit ${className}`}
+                                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-indigo-50 hover:text-indigo-700 transition"
+                                                            >
+                                                                <Pencil className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeClass(idx)}
+                                                                title={`Delete ${className}`}
+                                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
+                                                            >
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        );
+                                    })
                                 )}
                             </div>
 
-                            <div className="mt-4 rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/20 p-4">
-                                <label className="mb-2 block text-xs font-black uppercase tracking-wider text-indigo-900">
-                                    Add Class / Semester
+                            {/* ADD CUSTOM / SPECIAL BATCH */}
+                            <div className="mt-3.5">
+                                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                    Add Special Batch / Custom Class
                                 </label>
                                 <div className="flex gap-2">
                                     <input
-                                        ref={classInputRef}
+                                        ref={customInputRef}
                                         type="text"
-                                        value={newClassName}
-                                        onChange={(e) => setNewClassName(e.target.value)}
+                                        value={customClassInput}
+                                        onChange={(e) => setCustomClassInput(e.target.value)}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter') {
                                                 e.preventDefault();
-                                                addClassItem();
+                                                addCustomClass();
                                             }
                                         }}
-                                        placeholder="e.g. Class IX, +2 Arts, or Semester III"
-                                        className={inputClass}
+                                        placeholder="e.g. +2 1st Year (Vocational - Sec B) or PG Sem 2"
+                                        className="min-w-0 flex-1 rounded-xl border border-indigo-200 bg-indigo-50/20 px-3.5 py-2.5 text-xs font-semibold text-slate-900 outline-none focus:border-indigo-600 focus:bg-white focus:ring-2 focus:ring-indigo-100"
                                     />
                                     <button
                                         type="button"
-                                        onClick={addClassItem}
-                                        disabled={!newClassName.trim()}
-                                        className="flex h-[46px] shrink-0 items-center gap-1.5 rounded-xl bg-indigo-600 px-5 text-sm font-bold text-white shadow-md shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-40 transition"
+                                        onClick={addCustomClass}
+                                        disabled={!customClassInput.trim()}
+                                        className="flex h-[42px] shrink-0 items-center gap-1.5 rounded-xl bg-indigo-600 px-4 text-xs font-bold text-white shadow-md shadow-indigo-100 hover:bg-indigo-700 disabled:opacity-40 transition"
                                     >
                                         <Plus className="h-4 w-4" /> Add
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="mt-4 flex items-center justify-between text-[11px] text-slate-400 font-bold">
-                                <span>{classCount} {classCount === 1 ? 'group' : 'groups'} added</span>
-                                <span>Up to {MAX_CLASSES}</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* STEP 3: SUBJECTS */}
-                    {step === 3 && (
-                        <div className="px-5 py-6 sm:px-7 sm:py-7">
-                            <StepHeading
-                                icon={<BookOpen className="h-5 w-5" />}
-                                eyebrow="Step 3"
-                                title="What subjects or papers do you teach?"
-                                description="Add or remove the subjects and papers you teach under each class."
-                            />
-
-                            {/* EDITABILITY NOTICE BANNER */}
-                            <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-violet-100 bg-violet-50/70 p-3.5 text-xs text-violet-950">
-                                <CircleHelp className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
-                                <div className="min-w-0 flex-1">
-                                    <p className="font-extrabold text-violet-900">Customizable paper names</p>
-                                    <p className="mt-0.5 leading-5 text-violet-800">
-                                        You can remove any paper using the &times; button or add specific titles like <em>Odia Sahitya, Indian Polity, or Microeconomics</em>.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="mt-5 space-y-5">
-                                {classNames.map((className, classIndex) => {
-                                    const subs = subjectsByClass[classIndex] || [];
-                                    return (
-                                        <div
-                                            key={`${className}-${classIndex}`}
-                                            className="rounded-2xl border border-indigo-100 bg-indigo-50/30 p-4"
-                                        >
-                                            <div className="mb-3 flex items-center justify-between gap-3">
-                                                <div>
-                                                    <p className="text-[9px] font-black uppercase tracking-[0.16em] text-violet-600">
-                                                        Academic Group
-                                                    </p>
-                                                    <h3 className="mt-0.5 text-sm font-extrabold text-slate-900">
-                                                        {className}
-                                                    </h3>
-                                                </div>
-                                                <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200">
-                                                    {subs.length} subjects
-                                                </span>
-                                            </div>
-
-                                            <div className="space-y-2 mb-3">
-                                                {subs.map((subject, subjectIndex) => (
-                                                    <div
-                                                        key={subjectIndex}
-                                                        className="flex items-center justify-between gap-2 rounded-xl border border-violet-100 bg-white px-3.5 py-2.5 shadow-sm"
-                                                    >
-                                                        <div className="flex items-center gap-2.5 min-w-0">
-                                                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-violet-100 text-[10px] font-black text-violet-700">
-                                                                {subjectIndex + 1}
-                                                            </span>
-                                                            <span className="truncate text-xs font-bold text-slate-800">
-                                                                {subject}
-                                                            </span>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeSubjectItem(classIndex, subjectIndex)}
-                                                            aria-label="Remove subject"
-                                                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
-                                                        >
-                                                            <X className="h-3.5 w-3.5" />
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-
-                                            <div className="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={newSubjectName[classIndex] || ''}
-                                                    onChange={(e) =>
-                                                        setNewSubjectName((prev) => ({
-                                                            ...prev,
-                                                            [classIndex]: e.target.value,
-                                                        }))
-                                                    }
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault();
-                                                            addSubjectItem(classIndex);
-                                                        }
-                                                    }}
-                                                    placeholder={`Add subject for ${className}`}
-                                                    className="min-w-0 flex-1 rounded-xl border border-violet-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-900 outline-none focus:border-violet-600 focus:ring-2 focus:ring-violet-100"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => addSubjectItem(classIndex)}
-                                                    disabled={!(newSubjectName[classIndex] || '').trim()}
-                                                    className="flex h-[38px] shrink-0 items-center gap-1 rounded-xl bg-violet-600 px-4 text-xs font-bold text-white shadow-sm hover:bg-violet-700 disabled:opacity-40 transition"
-                                                >
-                                                    <Plus className="h-3.5 w-3.5" /> Add
-                                                </button>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* STEP 4: UNITS */}
-                    {step === 4 && (
-                        <div className="px-5 py-6 sm:px-7 sm:py-7">
-                            <StepHeading
-                                icon={<Layers3 className="h-5 w-5" />}
-                                eyebrow="Step 4"
-                                title="What are the units in each subject?"
-                                description="Add or customize the teaching modules or chapter units for each subject."
-                            />
-
-                            {/* EDITABILITY NOTICE BANNER */}
-                            <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-slate-200 bg-slate-100/70 p-3.5 text-xs text-slate-800">
-                                <CircleHelp className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" />
-                                <div className="min-w-0 flex-1">
-                                    <p className="font-extrabold text-slate-900">Custom units / chapters</p>
-                                    <p className="mt-0.5 leading-5 text-slate-600">
-                                        Use generic labels like <em>Unit 1, Unit 2</em> or type exact chapter names like <em>Ch-1: Vedic Literature</em>.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="mt-5 space-y-5">
-                                {classNames.map((className, classIndex) => {
-                                    const subs = subjectsByClass[classIndex] || [];
-                                    return (
-                                        <div key={`${className}-${classIndex}`} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                                            <h3 className="text-sm font-extrabold text-slate-900 mb-3">{className}</h3>
-
-                                            <div className="space-y-4">
-                                                {subs.map((subject, subjectIndex) => {
-                                                    const units = unitsBySubject[classIndex]?.[subjectIndex] || [];
-                                                    const unitKey = `${classIndex}-${subjectIndex}`;
-                                                    return (
-                                                        <div key={`${subject}-${subjectIndex}`} className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-                                                            <div className="flex items-center justify-between gap-2 mb-2">
-                                                                <p className="min-w-0 truncate text-xs font-extrabold text-indigo-900">
-                                                                    {subject}
-                                                                </p>
-                                                                <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide text-slate-400">
-                                                                    {units.length} units
-                                                                </span>
-                                                            </div>
-
-                                                            <div className="space-y-1.5 mb-2.5">
-                                                                {units.map((unit, unitIndex) => (
-                                                                    <div key={unitIndex} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
-                                                                        <div className="flex items-center gap-2 min-w-0">
-                                                                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-200 text-[9px] font-black text-slate-600">
-                                                                                {unitIndex + 1}
-                                                                            </span>
-                                                                            <span className="truncate text-xs font-semibold text-slate-700">
-                                                                                {unit}
-                                                                            </span>
-                                                                        </div>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => removeUnitItem(classIndex, subjectIndex, unitIndex)}
-                                                                            aria-label="Remove unit"
-                                                                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
-                                                                        >
-                                                                            <Minus className="h-3 w-3" />
-                                                                        </button>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-
-                                                            <div className="flex gap-2">
-                                                                <input
-                                                                    type="text"
-                                                                    value={newUnitName[unitKey] || ''}
-                                                                    onChange={(e) =>
-                                                                        setNewUnitName((prev) => ({
-                                                                            ...prev,
-                                                                            [unitKey]: e.target.value,
-                                                                        }))
-                                                                    }
-                                                                    onKeyDown={(e) => {
-                                                                        if (e.key === 'Enter') {
-                                                                            e.preventDefault();
-                                                                            addUnitItem(classIndex, subjectIndex);
-                                                                        }
-                                                                    }}
-                                                                    placeholder={`Add unit for ${subject}`}
-                                                                    className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-50"
-                                                                />
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => addUnitItem(classIndex, subjectIndex)}
-                                                                    disabled={!(newUnitName[unitKey] || '').trim()}
-                                                                    className="flex h-[34px] shrink-0 items-center gap-1 rounded-lg bg-indigo-600 px-3 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-40 transition"
-                                                                >
-                                                                    <Plus className="h-3 w-3" /> Add
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* STEP 5: REVIEW & COMPLETE */}
-                    {step === 5 && (
-                        <div className="px-5 py-7 text-center sm:px-8 sm:py-8">
-                            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-emerald-50 text-emerald-600 shadow-lg shadow-emerald-100">
-                                <CheckCircle2 className="h-8 w-8" />
-                            </div>
-
-                            <div className="mt-5">
-                                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">
-                                    Syllabus Setup Complete
-                                </span>
-                                <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900">
-                                    Your teaching structure is ready.
-                                </h2>
-                                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                                    ProfPlan now knows what you teach. The next step is to configure your weekly timetable.
-                                </p>
-                            </div>
-
-                            <div className="mt-6 grid grid-cols-3 gap-2">
-                                <SummaryCard value={classCount} label={classCount === 1 ? 'Class / Semester' : 'Classes / Semesters'} icon={<Users className="h-4 w-4" />} />
-                                <SummaryCard value={subjectCount} label="Subjects / Papers" icon={<BookOpen className="h-4 w-4" />} />
-                                <SummaryCard value={unitCount} label="Units" icon={<Layers3 className="h-4 w-4" />} />
-                            </div>
-
-                            {/* DEDICATED WHATSAPP COMMUNITY INVITATION CARD */}
-                            <div className="mt-5 text-left">
-                                <a
-                                    href={WHATSAPP_COMMUNITY_URL}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    title="Join OdishaTeachers WhatsApp Community"
-                                    className="group flex items-center justify-between gap-3 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 p-4 transition hover:border-emerald-500 hover:shadow-lg"
-                                >
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-200 group-hover:scale-105 transition-transform">
-                                            <MessageCircle className="h-6 w-6" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <span className="rounded-full bg-emerald-600/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-800">
-                                                Teacher Support &amp; Collaboration
-                                            </span>
-                                            <h4 className="mt-0.5 truncate text-xs font-extrabold text-slate-900 sm:text-sm">
-                                                Join the OdishaTeachers.com WhatsApp Community
-                                            </h4>
-                                            <p className="text-[11px] text-slate-600">
-                                                Connect with fellow educators, share teaching resources &amp; circulars.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <span className="shrink-0 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white group-hover:bg-emerald-700 transition">
-                                        Join Now &rarr;
-                                    </span>
-                                </a>
-                            </div>
-
-                            <div className="mt-4 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-violet-50 p-4 text-left">
+                            {/* PROMINENT SYLLABUS ADVISORY CARD */}
+                            <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50/90 to-teal-50/70 p-4 text-left shadow-sm">
                                 <div className="flex items-start gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white">
-                                        <span className="text-sm font-black">5</span>
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-200">
+                                        <BookOpen className="h-4 w-4" />
                                     </div>
-                                    <div>
-                                        <p className="text-[9px] font-black uppercase tracking-[0.16em] text-indigo-600">Next Step</p>
-                                        <h3 className="mt-0.5 text-sm font-extrabold text-slate-900">Set up your weekly timetable</h3>
-                                        <p className="mt-1 text-xs leading-5 text-slate-600">
-                                            Add your teaching periods, days, subjects, and rooms. ProfPlan will use this to organise your daily lesson records.
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-black text-emerald-950">
+                                            Next: Subjects &amp; Units in Syllabus Module
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] leading-relaxed text-emerald-900">
+                                            No typing required here! Once setup completes, you can attach specific subjects, chapters, and topics class-wise anytime inside the dedicated <strong>Syllabus Module</strong>.
                                         </p>
                                     </div>
                                 </div>
                             </div>
-
-                            <button
-                                type="button"
-                                disabled={saving}
-                                onClick={finishSyllabusAndOpenTimetable}
-                                className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 py-4 text-sm font-extrabold text-white shadow-xl shadow-indigo-200 transition hover:-translate-y-0.5 hover:shadow-2xl disabled:cursor-wait disabled:opacity-70"
-                            >
-                                {saving ? (
-                                    <>
-                                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                                        Saving profile &amp; syllabus…
-                                    </>
-                                ) : (
-                                    <>
-                                        Set Up My Timetable <ArrowRight className="h-4 w-4" />
-                                    </>
-                                )}
-                            </button>
-
-                            <p className="mt-3 text-center text-[10px] text-slate-400">
-                                Your profile and syllabus will be securely saved before the Timetable opens.
-                            </p>
                         </div>
                     )}
 
                 </div>
 
-                {/* ERROR MESSAGE */}
+                {/* ERROR NOTIFICATION */}
                 {errorMessage && (
-                    <div className="shrink-0 border-t border-red-100 bg-red-50 px-5 py-3">
-                        <div className="flex items-start gap-2 text-xs font-semibold text-red-700">
-                            <CircleHelp className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div className="shrink-0 border-t border-red-100 bg-red-50 px-5 py-2.5">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-red-700">
+                            <CircleHelp className="h-4 w-4 shrink-0" />
                             <span>{errorMessage}</span>
                         </div>
                     </div>
                 )}
 
-                {/* FOOTER NAVIGATION (STEPS 1 THROUGH 5) */}
-                {step > 0 && (
-                    <div className="shrink-0 border-t border-slate-100 bg-white px-5 py-4 sm:px-7">
-                        <div className="flex items-center gap-2">
+                {/* BOTTOM NAVIGATION FOOTER */}
+                <div className="shrink-0 border-t border-slate-100 bg-white px-5 py-3.5 sm:px-7">
+                    <div className="flex items-center gap-2">
+                        {step > 1 && (
                             <button
                                 type="button"
                                 onClick={goBack}
@@ -1377,60 +967,49 @@ export default function OnboardingModal({
                             >
                                 <ArrowLeft className="h-4 w-4" />
                             </button>
+                        )}
 
-                            {step === 1 && (
-                                <button
-                                    type="button"
-                                    onClick={goToClasses}
-                                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700"
-                                >
-                                    Continue <ArrowRight className="h-4 w-4" />
-                                </button>
-                            )}
+                        {step === 1 && (
+                            <button
+                                type="button"
+                                onClick={goToStep2}
+                                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-xs font-extrabold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700"
+                            >
+                                Select Educational Levels <ArrowRight className="h-4 w-4" />
+                            </button>
+                        )}
 
-                            {step === 2 && (
-                                <button
-                                    type="button"
-                                    onClick={goToSubjects}
-                                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700"
-                                >
-                                    Continue to Subjects <ArrowRight className="h-4 w-4" />
-                                </button>
-                            )}
+                        {step === 2 && (
+                            <button
+                                type="button"
+                                onClick={buildClassesFromTiers}
+                                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-xs font-extrabold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700"
+                            >
+                                Populate Classes ({selectedTiers.length} Levels Selected) <ArrowRight className="h-4 w-4" />
+                            </button>
+                        )}
 
-                            {step === 3 && (
-                                <button
-                                    type="button"
-                                    onClick={goToUnits}
-                                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white shadow-lg shadow-violet-100 transition hover:bg-violet-700"
-                                >
-                                    Continue to Units <ArrowRight className="h-4 w-4" />
-                                </button>
-                            )}
-
-                            {step === 4 && (
-                                <button
-                                    type="button"
-                                    onClick={goToReview}
-                                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-bold text-white shadow-lg shadow-violet-100 transition hover:bg-violet-700"
-                                >
-                                    Review My Syllabus <ArrowRight className="h-4 w-4" />
-                                </button>
-                            )}
-
-                            {step === 5 && (
-                                <button
-                                    type="button"
-                                    disabled={saving}
-                                    onClick={finishSyllabusAndOpenTimetable}
-                                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700 disabled:opacity-50"
-                                >
-                                    Proceed to Timetable <ArrowRight className="h-4 w-4" />
-                                </button>
-                            )}
-                        </div>
+                        {step === 3 && (
+                            <button
+                                type="button"
+                                disabled={saving}
+                                onClick={completeSetup}
+                                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-4 text-xs font-black text-white shadow-xl shadow-indigo-200 transition hover:opacity-95 disabled:opacity-50"
+                            >
+                                {saving ? (
+                                    <>
+                                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white mr-2" />
+                                        Finalising Workspace…
+                                    </>
+                                ) : (
+                                    <>
+                                        Complete &amp; Launch Timetable <ArrowRight className="h-4 w-4" />
+                                    </>
+                                )}
+                            </button>
+                        )}
                     </div>
-                )}
+                </div>
 
             </div>
         </div>
@@ -1439,7 +1018,7 @@ export default function OnboardingModal({
 
 
 /* ============================================================
-   REUSABLE UI
+   REUSABLE UI HELPERS
 ============================================================ */
 
 const inputClass = `
@@ -1447,10 +1026,10 @@ const inputClass = `
     rounded-xl
     border-2
     border-indigo-200/80
-    bg-indigo-50/30
+    bg-indigo-50/20
     px-4
     py-3
-    text-sm
+    text-xs sm:text-sm
     font-semibold
     text-slate-900
     outline-none
@@ -1474,22 +1053,20 @@ function StepHeading({
     description: string;
 }) {
     return (
-        <div>
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">
-                        {eyebrow}
-                    </p>
-                    <h2 className="mt-1 text-xl font-black leading-tight tracking-tight text-slate-900 sm:text-2xl">
-                        {title}
-                    </h2>
-                    <p className="mt-2 max-w-lg text-xs leading-5 text-slate-500 sm:text-sm">
-                        {description}
-                    </p>
-                </div>
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                    {icon}
-                </div>
+        <div className="flex items-start justify-between gap-4">
+            <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
+                    {eyebrow}
+                </p>
+                <h2 className="mt-1 text-lg sm:text-xl font-black leading-tight tracking-tight text-slate-900">
+                    {title}
+                </h2>
+                <p className="mt-1.5 max-w-md text-xs leading-relaxed text-slate-500">
+                    {description}
+                </p>
+            </div>
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 shadow-sm">
+                {icon}
             </div>
         </div>
     );
@@ -1506,31 +1083,11 @@ function Field({
 }) {
     return (
         <label className="block">
-            <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
+            <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
                 {label}
                 {required && <span className="ml-1 text-red-500">*</span>}
             </span>
             {children}
         </label>
-    );
-}
-
-function SummaryCard({
-    value,
-    label,
-    icon,
-}: {
-    value: number;
-    label: string;
-    icon: React.ReactNode;
-}) {
-    return (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
-            <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-white text-indigo-600 shadow-sm">
-                {icon}
-            </div>
-            <p className="mt-2 text-lg font-black text-slate-900">{value}</p>
-            <p className="mt-0.5 text-[9px] font-bold leading-3 text-slate-400">{label}</p>
-        </div>
     );
 }
