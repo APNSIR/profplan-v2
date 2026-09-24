@@ -18,8 +18,10 @@ import {
     CircleHelp,
     GraduationCap,
     Layers3,
+    MessageCircle,
     Minus,
     Plus,
+    RotateCcw,
     ShieldCheck,
     Trash2,
     UserCheck,
@@ -35,6 +37,8 @@ import {
     UserProfile,
 } from '@/lib/store';
 
+import { supabase } from '@/lib/supabaseClient';
+
 import type {
     ClassItem,
     Course,
@@ -43,8 +47,11 @@ import type {
 
 
 /* ============================================================
-   CONSTANTS
+   CONSTANTS & CONFIGURATION
 ============================================================ */
+
+const WHATSAPP_COMMUNITY_URL =
+    'https://chat.whatsapp.com/Gkm703nk0tzEojU0wol0pX?s=cl&p=i&mlu=4&ilr=4';
 
 const EMPTY_PROFILE: UserProfile = {
     name: '',
@@ -52,13 +59,12 @@ const EMPTY_PROFILE: UserProfile = {
     mobile: '',
     email: '',
     institutionType: '',
-    college: "People's College, Buguda",
+    college: '',
     department: '',
     onboarded: false,
 };
 
-const DRAFT_KEY =
-    'profplan_onboarding_draft_v3';
+const DRAFT_KEY = 'profplan_onboarding_draft_v3';
 
 const MAX_CLASSES = 20;
 const MAX_SUBJECTS = 20;
@@ -69,13 +75,7 @@ const MAX_UNITS = 20;
    TYPES
 ============================================================ */
 
-type WizardStep =
-    | 0
-    | 1
-    | 2
-    | 3
-    | 4
-    | 5;
+type WizardStep = 0 | 1 | 2 | 3 | 4 | 5;
 
 type DraftState = {
     step: WizardStep;
@@ -98,14 +98,11 @@ function createId(prefix: string): string {
         return `${prefix}_${crypto.randomUUID()}`;
     }
 
-    return `${prefix}_${Date.now()}_${Math.random()
-        .toString(36)
-        .slice(2, 10)}`;
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-
 function cleanText(value: string): string {
-    return value.replace(/\s+/g, ' ').trim();
+    return (value || '').replace(/\s+/g, ' ').trim();
 }
 
 
@@ -120,38 +117,23 @@ export default function OnboardingModal({
 }) {
     const router = useRouter();
 
-    const [isOpen, setIsOpen] =
-        useState(false);
-
-    const [step, setStep] =
-        useState<WizardStep>(0);
-
-    const [profile, setProfile] =
-        useState<UserProfile>(EMPTY_PROFILE);
+    const [isOpen, setIsOpen] = useState(false);
+    const [step, setStep] = useState<WizardStep>(0);
+    const [profile, setProfile] = useState<UserProfile>(EMPTY_PROFILE);
 
     // Dynamic additive state
-    const [classNames, setClassNames] =
-        useState<string[]>([]);
+    const [classNames, setClassNames] = useState<string[]>([]);
+    const [subjectsByClass, setSubjectsByClass] = useState<string[][]>([]);
+    const [unitsBySubject, setUnitsBySubject] = useState<string[][][]>([]);
 
-    const [subjectsByClass, setSubjectsByClass] =
-        useState<string[][]>([]);
-
-    const [unitsBySubject, setUnitsBySubject] =
-        useState<string[][][]>([]);
-
-    // Temporary input buffers for the active "add" row
+    // Temporary input buffers for active row
     const [newClassName, setNewClassName] = useState('');
     const [newSubjectName, setNewSubjectName] = useState<{ [classIdx: number]: string }>({});
     const [newUnitName, setNewUnitName] = useState<{ [key: string]: string }>({});
 
-    const [saving, setSaving] =
-        useState(false);
-
-    const [errorMessage, setErrorMessage] =
-        useState('');
-
-    const [draftAvailable, setDraftAvailable] =
-        useState(false);
+    const [saving, setSaving] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
+    const [draftAvailable, setDraftAvailable] = useState(false);
 
     const classInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -234,20 +216,16 @@ export default function OnboardingModal({
 
 
     /* ========================================================
-       PROFILE
+       PROFILE MANAGEMENT
     ======================================================== */
 
-    const updateProfile = (
-        field: keyof UserProfile,
-        value: string
-    ) => {
+    const updateProfile = (field: keyof UserProfile, value: string) => {
         setProfile((previous) => ({
             ...previous,
             [field]: value,
         }));
         setErrorMessage('');
     };
-
 
     const saveCurrentProfile = () => {
         const updatedProfile: UserProfile = {
@@ -268,14 +246,14 @@ export default function OnboardingModal({
 
 
     /* ========================================================
-       DYNAMIC ADDITIVE BUILDERS
+       DYNAMIC BUILDERS
     ======================================================== */
 
     const addClassItem = () => {
         const trimmed = cleanText(newClassName);
         if (!trimmed) return;
 
-        if (classNames.some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+        if (classNames.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
             setErrorMessage(`"${trimmed}" has already been added.`);
             return;
         }
@@ -299,13 +277,20 @@ export default function OnboardingModal({
         setUnitsBySubject((prev) => prev.filter((_, i) => i !== index));
     };
 
+    const clearAllClasses = () => {
+        if (confirm('Clear all listed classes to start your own list?')) {
+            setClassNames([]);
+            setSubjectsByClass([]);
+            setUnitsBySubject([]);
+        }
+    };
 
     const addSubjectItem = (classIndex: number) => {
         const subName = cleanText(newSubjectName[classIndex] || '');
         if (!subName) return;
 
         const currentSubs = subjectsByClass[classIndex] || [];
-        if (currentSubs.some(s => s.toLowerCase() === subName.toLowerCase())) {
+        if (currentSubs.some((s) => s.toLowerCase() === subName.toLowerCase())) {
             setErrorMessage(`"${subName}" is already added to this group.`);
             return;
         }
@@ -348,14 +333,13 @@ export default function OnboardingModal({
         });
     };
 
-
     const addUnitItem = (classIndex: number, subjectIndex: number) => {
         const key = `${classIndex}-${subjectIndex}`;
         const unitName = cleanText(newUnitName[key] || '');
         if (!unitName) return;
 
         const currentUnits = unitsBySubject[classIndex]?.[subjectIndex] || [];
-        if (currentUnits.some(u => u.toLowerCase() === unitName.toLowerCase())) {
+        if (currentUnits.some((u) => u.toLowerCase() === unitName.toLowerCase())) {
             setErrorMessage(`"${unitName}" is already added to this subject.`);
             return;
         }
@@ -420,9 +404,9 @@ export default function OnboardingModal({
         setUnitsBySubject(units);
         setErrorMessage('');
 
-        if (!profile.name.trim()) {
+        if (!profile.name.trim() || !profile.mobile.trim()) {
             setStep(1);
-            setErrorMessage('Please provide your name to complete the template setup.');
+            setErrorMessage('Please provide your name and phone number to complete the setup.');
         } else {
             setStep(5);
         }
@@ -430,7 +414,7 @@ export default function OnboardingModal({
 
 
     /* ========================================================
-       RESUME DRAFT
+       RESUME & DISCARD DRAFT
     ======================================================== */
 
     const resumeDraft = () => {
@@ -478,7 +462,6 @@ export default function OnboardingModal({
         }
     };
 
-
     const discardDraft = () => {
         try {
             window.localStorage.removeItem(DRAFT_KEY);
@@ -508,6 +491,13 @@ export default function OnboardingModal({
             setErrorMessage('Please enter your full name.');
             return;
         }
+
+        const phoneClean = profile.mobile.replace(/\D/g, '');
+        if (!phoneClean || phoneClean.length < 10) {
+            setErrorMessage('Please provide a valid 10-digit phone or WhatsApp number.');
+            return;
+        }
+
         saveCurrentProfile();
         setErrorMessage('');
         setStep(2);
@@ -525,7 +515,7 @@ export default function OnboardingModal({
     const goToUnits = () => {
         const missingSub = subjectsByClass.findIndex((subs) => !subs || subs.length === 0);
         if (missingSub !== -1) {
-            setErrorMessage(`Please add at least one subject for ${classNames[missingSub]}.`);
+            setErrorMessage(`Please add at least one subject for "${classNames[missingSub]}".`);
             return;
         }
         setErrorMessage('');
@@ -561,10 +551,10 @@ export default function OnboardingModal({
 
 
     /* ========================================================
-       FINAL SAVE
+       FINAL SAVE (SUPABASE + LOCAL SYNC)
     ======================================================== */
 
-    const finishSyllabusAndOpenTimetable = () => {
+    const finishSyllabusAndOpenTimetable = async () => {
         if (saving) return;
         setSaving(true);
         setErrorMessage('');
@@ -572,13 +562,59 @@ export default function OnboardingModal({
         try {
             if (!profile.name.trim()) {
                 setStep(1);
-                throw new Error('Please enter your full name in your profile.');
+                throw new Error('Please enter your full name.');
+            }
+
+            const phoneClean = profile.mobile.replace(/\D/g, '');
+            if (!phoneClean || phoneClean.length < 10) {
+                setStep(1);
+                throw new Error('Please provide a valid 10-digit phone or WhatsApp number.');
             }
 
             if (classNames.length === 0) {
+                setStep(2);
                 throw new Error('Please add at least one class or semester.');
             }
 
+            const completedProfile: UserProfile = {
+                ...profile,
+                name: cleanText(profile.name),
+                designation: cleanText(profile.designation),
+                mobile: phoneClean,
+                email: cleanText(profile.email),
+                institutionType: cleanText(profile.institutionType),
+                college: cleanText(profile.college),
+                department: cleanText(profile.department),
+                onboarded: true,
+            };
+
+            // 1. SAVE DIRECTLY TO SUPABASE BACKEND
+            if (supabase) {
+                try {
+                    const { error: dbError } = await supabase
+                        .from('profiles')
+                        .upsert(
+                            {
+                                full_name: completedProfile.name,
+                                phone: completedProfile.mobile,
+                                school_name: completedProfile.college,
+                                designation: completedProfile.designation,
+                                department: completedProfile.department,
+                                email: completedProfile.email || null,
+                                updated_at: new Date().toISOString(),
+                            },
+                            { onConflict: 'phone' }
+                        );
+
+                    if (dbError) {
+                        console.warn('Supabase profile sync notice:', dbError.message);
+                    }
+                } catch (supabaseErr) {
+                    console.warn('Supabase network dispatch error:', supabaseErr);
+                }
+            }
+
+            // 2. CONSTRUCT SYLLABUS RECORDS FOR LOCAL WORKSPACE
             const data = load();
 
             const existingClasses = (data.classes || []).filter(
@@ -633,18 +669,7 @@ export default function OnboardingModal({
                 units: [...existingUnits, ...newUnits],
             });
 
-            const completedProfile: UserProfile = {
-                ...profile,
-                name: cleanText(profile.name),
-                designation: cleanText(profile.designation),
-                mobile: cleanText(profile.mobile),
-                email: cleanText(profile.email),
-                institutionType: cleanText(profile.institutionType),
-                college: cleanText(profile.college),
-                department: cleanText(profile.department),
-                onboarded: true,
-            };
-
+            // 3. PERSIST COMPLETED STATE LOCALLY
             saveProfile(completedProfile);
 
             try {
@@ -675,48 +700,14 @@ export default function OnboardingModal({
 
     return (
         <div
-            className="
-                fixed inset-0 z-[100]
-                flex items-center justify-center
-                bg-slate-950/80
-                p-3 sm:p-5
-                backdrop-blur-md
-                animate-fade-in
-            "
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 p-3 sm:p-5 backdrop-blur-md animate-fade-in"
             role="dialog"
             aria-modal="true"
-            aria-label="ProfPlan setup wizard"
+            aria-label="OdishaTeachers.com ProfPlan setup wizard"
         >
-            <div
-                className="
-                    relative
-                    flex
-                    max-h-[94vh]
-                    w-full
-                    max-w-xl
-                    flex-col
-                    overflow-hidden
-                    rounded-[28px]
-                    border border-white/30
-                    bg-white
-                    shadow-2xl
-                "
-            >
+            <div className="relative flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-[28px] border border-white/30 bg-white shadow-2xl">
                 {/* BRAND HEADER */}
-                <div
-                    className="
-                        relative
-                        shrink-0
-                        overflow-hidden
-                        bg-gradient-to-r
-                        from-slate-950
-                        via-indigo-950
-                        to-slate-950
-                        px-5
-                        py-4
-                        text-white
-                    "
-                >
+                <div className="relative shrink-0 overflow-hidden bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 px-5 py-4 text-white">
                     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.30),transparent_45%)]" />
 
                     <div className="relative flex items-center justify-between gap-3">
@@ -734,18 +725,29 @@ export default function OnboardingModal({
 
                             <div className="min-w-0">
                                 <p className="truncate text-[9px] font-black uppercase tracking-[0.18em] text-indigo-300">
-                                    APNSIR Foundation Initiative
+                                    OdishaTeachers.com &bull; APNSIR Foundation
                                 </p>
                                 <p className="truncate text-sm font-bold text-white">
-                                    LessonPlan & Progress Record
+                                    ProfPlan &bull; LessonPlan & Progress Record
                                 </p>
                             </div>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-indigo-100 ring-1 ring-white/10">
-                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                            <span className="hidden sm:inline">Secure Workspace</span>
-                            <span className="sm:hidden">Secure</span>
+                        <div className="flex shrink-0 items-center gap-2">
+                            <a
+                                href={WHATSAPP_COMMUNITY_URL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Join OdishaTeachers WhatsApp Community"
+                                className="flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-[10px] font-bold text-white shadow-sm hover:bg-emerald-700 transition"
+                            >
+                                <MessageCircle className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline">WhatsApp Group</span>
+                            </a>
+                            <div className="hidden sm:flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-indigo-100 ring-1 ring-white/10">
+                                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                                <span>Secure</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -780,15 +782,15 @@ export default function OnboardingModal({
                             </div>
 
                             <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-600">
-                                Welcome, Educator
+                                Welcome to OdishaTeachers.com
                             </p>
 
                             <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-                                Let’s set up the teaching plan.
+                                Let’s set up your teaching plan.
                             </h1>
 
                             <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-500">
-                                ProfPlan brings your syllabus, timetable, lesson planning and class progress together in one simple workspace.
+                                ProfPlan brings your syllabus, timetable, lesson planning, and class progress together in one unified educator workspace.
                             </p>
 
                             <div className="mt-7 space-y-3 text-left">
@@ -809,7 +811,7 @@ export default function OnboardingModal({
                                                 Start with the Odisha UG Syllabus Template
                                             </h2>
                                             <p className="mt-1 text-xs leading-5 text-slate-600">
-                                                A ready-made six-semester structure with Major, Minor, AEC and SEC / VAC papers.
+                                                A ready-made six-semester structure with Major, Minor, AEC, and SEC / VAC papers. Fully editable at each step.
                                             </p>
                                             <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600">
                                                 Use this template <ChevronRight className="h-3.5 w-3.5" />
@@ -832,10 +834,10 @@ export default function OnboardingModal({
                                                 Custom Setup
                                             </span>
                                             <h2 className="mt-1 text-sm font-extrabold text-slate-900">
-                                                Create My Own Syllabus
+                                                Create My Own Custom Structure
                                             </h2>
                                             <p className="mt-1 text-xs leading-5 text-slate-600">
-                                                Enter your own classes / standards or semesters, subjects and units step by step.
+                                                Enter your own school standards (Class IX, X, +2) or college semesters, subjects, and units from scratch.
                                             </p>
                                             <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
                                                 Create my setup <ChevronRight className="h-3.5 w-3.5" />
@@ -860,14 +862,14 @@ export default function OnboardingModal({
                                                 <button
                                                     type="button"
                                                     onClick={resumeDraft}
-                                                    className="rounded-xl bg-amber-600 px-3 py-2 text-[11px] font-bold text-white"
+                                                    className="rounded-xl bg-amber-600 px-3 py-2 text-[11px] font-bold text-white shadow-sm hover:bg-amber-700"
                                                 >
                                                     Continue Setup
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={discardDraft}
-                                                    className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-[11px] font-bold text-amber-800"
+                                                    className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-[11px] font-bold text-amber-800 shadow-sm hover:bg-amber-100/50"
                                                 >
                                                     Start Fresh
                                                 </button>
@@ -886,7 +888,7 @@ export default function OnboardingModal({
                                 icon={<UserCheck className="h-5 w-5" />}
                                 eyebrow="Step 1"
                                 title="Tell ProfPlan about yourself."
-                                description="This information personalises your teaching workspace."
+                                description="This information personalises your lesson plans and registers your workspace."
                             />
 
                             <div className="mt-6 space-y-4">
@@ -896,7 +898,21 @@ export default function OnboardingModal({
                                         autoFocus
                                         value={profile.name}
                                         onChange={(e) => updateProfile('name', e.target.value)}
-                                        placeholder="e.g. Atmaprakash Nayak"
+                                        placeholder="e.g. Dr. Ramesh Chandra Nayak"
+                                        className={inputClass}
+                                    />
+                                </Field>
+
+                                <Field label="Phone / WhatsApp Number" required>
+                                    <input
+                                        type="tel"
+                                        maxLength={10}
+                                        value={profile.mobile}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '');
+                                            updateProfile('mobile', val);
+                                        }}
+                                        placeholder="e.g. 9861012345"
                                         className={inputClass}
                                     />
                                 </Field>
@@ -906,7 +922,7 @@ export default function OnboardingModal({
                                         type="text"
                                         value={profile.designation}
                                         onChange={(e) => updateProfile('designation', e.target.value)}
-                                        placeholder="e.g. Lecturer / Assistant Professor / Teacher"
+                                        placeholder="e.g. Lecturer / Assistant Professor / Headmaster"
                                         className={inputClass}
                                     />
                                 </Field>
@@ -916,7 +932,7 @@ export default function OnboardingModal({
                                         type="text"
                                         value={profile.college}
                                         onChange={(e) => updateProfile('college', e.target.value)}
-                                        placeholder="Your school / college / institution"
+                                        placeholder="e.g. People's College, Buguda"
                                         className={inputClass}
                                     />
                                 </Field>
@@ -926,7 +942,7 @@ export default function OnboardingModal({
                                         type="text"
                                         value={profile.department}
                                         onChange={(e) => updateProfile('department', e.target.value)}
-                                        placeholder="e.g. English"
+                                        placeholder="e.g. Odia, English, Botany, Political Science"
                                         className={inputClass}
                                     />
                                 </Field>
@@ -941,33 +957,59 @@ export default function OnboardingModal({
                                 icon={<Users className="h-5 w-5" />}
                                 eyebrow="Step 2"
                                 title="Which classes or semesters do you teach?"
-                                description="Add all CLASSES/SEMESTERS you teach one by one."
+                                description="Add, remove, or modify all classes or semesters to fit your schedule."
                             />
 
-                            <div className="mt-5 space-y-3">
-                                {classNames.map((className, index) => (
-                                    <div
-                                        key={index}
-                                        className="flex items-center justify-between gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-3.5 shadow-sm"
+                            {/* EDITABILITY NOTICE BANNER */}
+                            <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-3.5 text-xs text-indigo-950">
+                                <CircleHelp className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />
+                                <div className="min-w-0 flex-1">
+                                    <p className="font-extrabold text-indigo-900">Customise to your need</p>
+                                    <p className="mt-0.5 leading-5 text-indigo-800">
+                                        These items can be edited freely. Delete unwanted items with the trash button or add school standards (e.g., <em>Class IX, +2 Arts</em>) below.
+                                    </p>
+                                </div>
+                                {classNames.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={clearAllClasses}
+                                        className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-red-50 hover:text-red-600 transition"
                                     >
-                                        <div className="flex items-center gap-3 min-w-0">
-                                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
-                                                {index + 1}
-                                            </span>
-                                            <span className="truncate text-sm font-bold text-slate-800">
-                                                {className}
-                                            </span>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => removeClassItem(index)}
-                                            aria-label="Remove class"
-                                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
+                                        <RotateCcw className="h-3 w-3" /> Clear All
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="mt-5 space-y-3">
+                                {classNames.length === 0 ? (
+                                    <div className="rounded-2xl border-2 border-dashed border-slate-200 p-6 text-center text-xs font-semibold text-slate-400">
+                                        No classes added yet. Use the field below to add your teaching classes or semesters.
                                     </div>
-                                ))}
+                                ) : (
+                                    classNames.map((className, index) => (
+                                        <div
+                                            key={index}
+                                            className="flex items-center justify-between gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-3.5 shadow-sm"
+                                        >
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-xs font-bold text-white">
+                                                    {index + 1}
+                                                </span>
+                                                <span className="truncate text-sm font-bold text-slate-800">
+                                                    {className}
+                                                </span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeClassItem(index)}
+                                                aria-label={`Remove ${className}`}
+                                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    ))
+                                )}
                             </div>
 
                             <div className="mt-4 rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/20 p-4">
@@ -986,7 +1028,7 @@ export default function OnboardingModal({
                                                 addClassItem();
                                             }
                                         }}
-                                        placeholder="e.g. Class XII or Semester III"
+                                        placeholder="e.g. Class IX, +2 Arts, or Semester III"
                                         className={inputClass}
                                     />
                                     <button
@@ -1014,8 +1056,19 @@ export default function OnboardingModal({
                                 icon={<BookOpen className="h-5 w-5" />}
                                 eyebrow="Step 3"
                                 title="What subjects or papers do you teach?"
-                                description="Add the subjects or papers you teach under each CLASS / Semester."
+                                description="Add or remove the subjects and papers you teach under each class."
                             />
+
+                            {/* EDITABILITY NOTICE BANNER */}
+                            <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-violet-100 bg-violet-50/70 p-3.5 text-xs text-violet-950">
+                                <CircleHelp className="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
+                                <div className="min-w-0 flex-1">
+                                    <p className="font-extrabold text-violet-900">Customizable paper names</p>
+                                    <p className="mt-0.5 leading-5 text-violet-800">
+                                        You can remove any paper using the &times; button or add specific titles like <em>Odia Sahitya, Indian Polity, or Microeconomics</em>.
+                                    </p>
+                                </div>
+                            </div>
 
                             <div className="mt-5 space-y-5">
                                 {classNames.map((className, classIndex) => {
@@ -1107,8 +1160,19 @@ export default function OnboardingModal({
                                 icon={<Layers3 className="h-5 w-5" />}
                                 eyebrow="Step 4"
                                 title="What are the units in each subject?"
-                                description="Add the teaching units or modules for each subject."
+                                description="Add or customize the teaching modules or chapter units for each subject."
                             />
+
+                            {/* EDITABILITY NOTICE BANNER */}
+                            <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-slate-200 bg-slate-100/70 p-3.5 text-xs text-slate-800">
+                                <CircleHelp className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" />
+                                <div className="min-w-0 flex-1">
+                                    <p className="font-extrabold text-slate-900">Custom units / chapters</p>
+                                    <p className="mt-0.5 leading-5 text-slate-600">
+                                        Use generic labels like <em>Unit 1, Unit 2</em> or type exact chapter names like <em>Ch-1: Vedic Literature</em>.
+                                    </p>
+                                </div>
+                            </div>
 
                             <div className="mt-5 space-y-5">
                                 {classNames.map((className, classIndex) => {
@@ -1209,7 +1273,7 @@ export default function OnboardingModal({
                                     Your teaching structure is ready.
                                 </h2>
                                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                                    ProfPlan now knows what you teach. The next step is to tell it <strong>when</strong> you teach.
+                                    ProfPlan now knows what you teach. The next step is to configure your weekly timetable.
                                 </p>
                             </div>
 
@@ -1219,16 +1283,47 @@ export default function OnboardingModal({
                                 <SummaryCard value={unitCount} label="Units" icon={<Layers3 className="h-4 w-4" />} />
                             </div>
 
-                            <div className="mt-5 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-violet-50 p-4 text-left">
+                            {/* DEDICATED WHATSAPP COMMUNITY INVITATION CARD */}
+                            <div className="mt-5 text-left">
+                                <a
+                                    href={WHATSAPP_COMMUNITY_URL}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Join OdishaTeachers WhatsApp Community"
+                                    className="group flex items-center justify-between gap-3 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 p-4 transition hover:border-emerald-500 hover:shadow-lg"
+                                >
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-200 group-hover:scale-105 transition-transform">
+                                            <MessageCircle className="h-6 w-6" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <span className="rounded-full bg-emerald-600/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-800">
+                                                Teacher Support &amp; Collaboration
+                                            </span>
+                                            <h4 className="mt-0.5 truncate text-xs font-extrabold text-slate-900 sm:text-sm">
+                                                Join the OdishaTeachers.com WhatsApp Community
+                                            </h4>
+                                            <p className="text-[11px] text-slate-600">
+                                                Connect with fellow educators, share teaching resources &amp; circulars.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <span className="shrink-0 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white group-hover:bg-emerald-700 transition">
+                                        Join Now &rarr;
+                                    </span>
+                                </a>
+                            </div>
+
+                            <div className="mt-4 rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-violet-50 p-4 text-left">
                                 <div className="flex items-start gap-3">
                                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white">
                                         <span className="text-sm font-black">5</span>
                                     </div>
                                     <div>
-                                        <p className="text-[9px] font-black uppercase tracking-[0.16em] text-indigo-600">Next</p>
+                                        <p className="text-[9px] font-black uppercase tracking-[0.16em] text-indigo-600">Next Step</p>
                                         <h3 className="mt-0.5 text-sm font-extrabold text-slate-900">Set up your weekly timetable</h3>
                                         <p className="mt-1 text-xs leading-5 text-slate-600">
-                                            Add your teaching periods, days, subjects and rooms. ProfPlan will then use your timetable to organise your daily teaching plan.
+                                            Add your teaching periods, days, subjects, and rooms. ProfPlan will use this to organise your daily lesson records.
                                         </p>
                                     </div>
                                 </div>
@@ -1243,7 +1338,7 @@ export default function OnboardingModal({
                                 {saving ? (
                                     <>
                                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                                        Saving your syllabus…
+                                        Saving profile &amp; syllabus…
                                     </>
                                 ) : (
                                     <>
@@ -1253,7 +1348,7 @@ export default function OnboardingModal({
                             </button>
 
                             <p className="mt-3 text-center text-[10px] text-slate-400">
-                                Your syllabus will be saved before the Timetable page opens.
+                                Your profile and syllabus will be securely saved before the Timetable opens.
                             </p>
                         </div>
                     )}
@@ -1270,14 +1365,14 @@ export default function OnboardingModal({
                     </div>
                 )}
 
-                {/* FOOTER NAVIGATION */}
-                {step > 0 && step < 5 && (
+                {/* FOOTER NAVIGATION (STEPS 1 THROUGH 5) */}
+                {step > 0 && (
                     <div className="shrink-0 border-t border-slate-100 bg-white px-5 py-4 sm:px-7">
                         <div className="flex items-center gap-2">
                             <button
                                 type="button"
                                 onClick={goBack}
-                                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
+                                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
                                 aria-label="Go back"
                             >
                                 <ArrowLeft className="h-4 w-4" />
@@ -1322,6 +1417,17 @@ export default function OnboardingModal({
                                     Review My Syllabus <ArrowRight className="h-4 w-4" />
                                 </button>
                             )}
+
+                            {step === 5 && (
+                                <button
+                                    type="button"
+                                    disabled={saving}
+                                    onClick={finishSyllabusAndOpenTimetable}
+                                    className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    Proceed to Timetable <ArrowRight className="h-4 w-4" />
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}
@@ -1356,7 +1462,6 @@ const inputClass = `
     focus:ring-indigo-100
 `;
 
-
 function StepHeading({
     icon,
     eyebrow,
@@ -1390,7 +1495,6 @@ function StepHeading({
     );
 }
 
-
 function Field({
     label,
     required = false,
@@ -1410,7 +1514,6 @@ function Field({
         </label>
     );
 }
-
 
 function SummaryCard({
     value,

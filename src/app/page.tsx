@@ -1,184 +1,366 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   ArrowRight, 
   Sparkles, 
-  BookOpen, 
-  Users, 
   ShieldCheck, 
-  Phone, 
   MapPin, 
   Building2, 
-  FileCheck2, 
-  Laptop 
+  Laptop,
+  MessageCircle,
+  LogIn,
+  X,
+  Award,
+  HelpCircle
 } from 'lucide-react';
 
+const WHATSAPP_COMMUNITY_URL =
+  'https://chat.whatsapp.com/Gkm703nk0tzEojU0wol0pX?s=cl&p=i&mlu=4&ilr=4';
+
+const HELP_DESK_PHONE = "916371421335";
+const HELP_DESK_URL = `https://wa.me/${HELP_DESK_PHONE}?text=${encodeURIComponent(
+  "Namaskar Sir, I am an educator visiting OdishaTeachers.com. I would like assistance regarding the platform."
+)}`;
+
 export default function Home() {
-    const phoneNumber = "6371421335";
-    const corporateAddress = "Qr. No. BL-106, VSS Nagar, Mancheswar, Bhubaneswar, Khorda - 751017, Odisha";
+  const router = useRouter();
+  const corporateAddress = "Qr. No. BL-106, VSS Nagar, Mancheswar, Bhubaneswar, Khorda - 751017, Odisha";
 
-    // When landing on the home page, temporarily suppress the global modal
-    useEffect(() => {
-        try {
-            const profile = JSON.parse(localStorage.getItem('profplan_profile') || '{}');
-            if (!profile.onboarded) {
-                localStorage.setItem('profplan_landing_active', 'true');
-            }
-        } catch {
-            // Ignore
+  const [isOnboarded, setIsOnboarded] = useState(false);
+  const [userName, setUserName] = useState('');
+  const [showSignInModal, setShowSignInModal] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedProfile = localStorage.getItem('profplan_profile');
+      if (storedProfile) {
+        const parsed = JSON.parse(storedProfile);
+        if (parsed?.onboarded) {
+          setIsOnboarded(true);
+          setUserName(parsed.name || 'Teacher');
+        } else {
+          localStorage.setItem('profplan_landing_active', 'true');
         }
+      } else {
+        localStorage.setItem('profplan_landing_active', 'true');
+      }
+    } catch {
+      // Safe fallback
+    }
 
-        return () => {
-            localStorage.removeItem('profplan_landing_active');
-        };
-    }, []);
-
-    const handleLaunch = () => {
-        localStorage.removeItem('profplan_landing_active');
+    return () => {
+      localStorage.removeItem('profplan_landing_active');
     };
+  }, []);
 
-    return (
-        <div className="fixed inset-0 z-50 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 text-white flex flex-col justify-between px-6 py-6 overflow-y-auto selection:bg-indigo-500 selection:text-white">
+  const handleLaunchSetup = () => {
+    localStorage.removeItem('profplan_landing_active');
+    router.push('/timetable?setup=1');
+  };
+
+  const handleDirectWorkspace = () => {
+    localStorage.removeItem('profplan_landing_active');
+    router.push('/timetable');
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      alert("Connecting with Google Account... Returning teachers will be redirected to their saved timetable.");
+      handleDirectWorkspace();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 text-white flex flex-col justify-between px-4 sm:px-8 py-5 overflow-x-hidden selection:bg-indigo-500 selection:text-white">
+      
+      {/* ============================================================
+          1. HEADER: BRAND & OFFICIAL INITIATIVE
+      ============================================================ */}
+      <header className="max-w-4xl mx-auto w-full pb-3 border-b border-white/10">
+        <div className="flex items-center justify-between gap-3">
+          
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="relative w-11 h-11 sm:w-13 sm:h-13 shrink-0 overflow-hidden rounded-full bg-white p-0.5 shadow-lg ring-2 ring-indigo-400/40">
+              <img
+                src="/apnsir-logo.png"
+                alt="APNSIR Foundation Logo"
+                className="w-full h-full object-contain rounded-full"
+                width={52}
+                height={52}
+              />
+            </div>
             
-            {/* Top Navigation / Brand with APNSIR Logo */}
-            <header className="max-w-5xl mx-auto w-full flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full bg-white p-0.5 shadow-md border border-slate-700">
-                        <Image
-                            src="/apnsir-logo.png"
-                            alt="APNSIR Foundation Logo"
-                            width={48}
-                            height={48}
-                            priority
-                            className="h-full w-full object-contain rounded-full"
-                        />
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-300">
-                            APNSIR Foundation (An NGO for Teachers)
-                        </p>
-                        <p className="text-sm font-extrabold text-white tracking-wide">
-                            OdishaTeachers<span className="text-orange-500 font-black">.com</span>
-                        </p>
-                    </div>
-                </div>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-tight">
+                OdishaTeachers<span className="text-orange-500">.com</span>
+              </h1>
 
-                <div className="hidden sm:flex items-center gap-4">
-                    <div className="flex items-center gap-1.5 text-xs text-slate-300 bg-white/5 px-3.5 py-1.5 rounded-full border border-white/10 shadow-sm">
-                        <Phone className="h-3.5 w-3.5 text-orange-400" />
-                        <span className="font-bold">{phoneNumber}</span>
-                    </div>
-                    <Link
-                        href="/timetable"
-                        onClick={handleLaunch}
-                        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-2 text-xs font-extrabold text-white shadow-md hover:bg-indigo-500 transition cursor-pointer"
-                    >
-                        Open App <ArrowRight className="h-3.5 w-3.5" />
-                    </Link>
-                </div>
-            </header>
+              <div className="flex flex-wrap items-center gap-x-1.5 text-[10px] sm:text-xs mt-0.5">
+                <span className="text-slate-400">An Initiative of</span>
+                <span className="font-bold text-indigo-300">APNSIR FOUNDATION</span>
+                <span className="text-slate-500">&bull;</span>
+                <span className="font-medium text-slate-300">Section 8 Company</span>
+              </div>
+            </div>
+          </div>
 
-            {/* Hero Section */}
-            <div className="max-w-3xl mx-auto text-center my-auto py-6">
-                <div className="inline-flex items-center gap-2 rounded-full bg-indigo-500/10 px-4 py-2 text-xs font-bold text-indigo-300 ring-1 ring-indigo-500/30 mb-5 shadow-sm">
-                    <Sparkles className="h-4 w-4 text-orange-400" /> Welcome to OdishaTeachers.com — An inclusive platform for educators and the community that supports them.
-                </div>
+          <a
+            href={HELP_DESK_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Chat with Help Desk on WhatsApp"
+            className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600/20 px-3.5 py-1.5 text-[11px] font-bold text-emerald-300 ring-1 ring-emerald-500/30 hover:bg-emerald-600 hover:text-white transition whitespace-nowrap shrink-0 shadow-sm"
+          >
+            <HelpCircle className="h-3.5 w-3.5 text-emerald-400" />
+            <span>Help Desk</span>
+          </a>
+        </div>
+      </header>
 
-                <h1 className="text-3xl sm:text-5xl font-black tracking-tight leading-tight text-white">
-                    Digital Excellence for <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-violet-300 to-white">Every Educator in Odisha.</span>
-                </h1>
+      {/* ============================================================
+          2. HERO SECTION & CORE APPLICATION FLOW
+      ============================================================ */}
+      <main className="max-w-3xl mx-auto text-center my-auto py-6 sm:py-9 w-full">
+        
+        {/* Initiative Pill */}
+        <div className="inline-flex items-center gap-2 rounded-full bg-indigo-500/10 px-3.5 py-1 text-[11px] font-bold text-indigo-300 ring-1 ring-indigo-500/30 mb-3 shadow-sm">
+          <Sparkles className="h-3.5 w-3.5 text-orange-400" />
+          <span>Odisha's Dedicated Digital Platform for Teachers</span>
+        </div>
 
-                {/* Fully Clickable, Perfectly Centered PROFPLAN Product Card (Without Launch App Text) */}
-                <Link 
-                    href="/timetable" 
-                    onClick={handleLaunch}
-                    className="group block mt-6 text-slate-200 max-w-2xl mx-auto leading-relaxed bg-gradient-to-b from-white/[0.09] to-white/[0.04] border border-white/20 p-7 rounded-[2rem] backdrop-blur-xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition duration-300 hover:-translate-y-1 hover:border-indigo-500/60 hover:shadow-indigo-500/10 cursor-pointer text-center relative overflow-hidden"
-                >
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-black uppercase tracking-[0.2em] mb-3 ring-1 ring-indigo-500/30">
-                        <Laptop className="h-3.5 w-3.5 text-orange-400" /> Featured Digital Tool
-                    </div>
-                    <p className="font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-100 to-indigo-300 text-3xl tracking-tight">PROFPLAN</p>
-                    <p className="text-indigo-200 font-bold text-sm mt-1 tracking-wide">E-Lesson Plan-cum-Progress Register</p>
-                    <p className="text-orange-400 font-extrabold text-xs mt-3 uppercase tracking-wider">A Gift to the Teaching Fraternity</p>
-                    <p className="text-slate-300 text-xs font-medium tracking-wider mt-1.5 italic">Plan • Teach • Record • Progress</p>
-                    <div className="mt-5 pt-4 border-t border-white/10 text-[11px] text-indigo-300 font-bold tracking-[0.18em] uppercase">
-                        An APNSIR FOUNDATION Initiative
-                    </div>
-                </Link>
+        {/* Vision Headline */}
+        <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight text-white">
+          Digital Excellence for{' '}
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-violet-300 to-white">
+            Every Educator in Odisha.
+          </span>
+        </h2>
 
-                {/* Main CTA Button */}
-                <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-4">
-                    <Link
-                        href="/timetable"
-                        onClick={handleLaunch}
-                        className="w-full sm:w-auto inline-flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-8 py-4 text-base font-extrabold text-white shadow-xl shadow-indigo-900/50 hover:-translate-y-0.5 hover:shadow-2xl transition cursor-pointer text-center"
-                    >
-                        Open E-Lesson Plan-cum-Progress Register App (ProfPlan) <ArrowRight className="h-5 w-5 shrink-0" />
-                    </Link>
-                </div>
+        {/* Featured Product: PROFPLAN */}
+        <div 
+          onClick={isOnboarded ? handleDirectWorkspace : handleLaunchSetup}
+          className="group block mt-6 text-slate-200 max-w-xl mx-auto leading-relaxed bg-gradient-to-b from-white/[0.09] to-white/[0.04] border border-white/20 p-5 sm:p-6 rounded-[1.75rem] backdrop-blur-xl shadow-[0_16px_40px_rgba(0,0,0,0.45)] transition duration-300 hover:-translate-y-0.5 hover:border-indigo-500/60 hover:shadow-indigo-500/10 cursor-pointer text-center relative overflow-hidden"
+        >
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[9px] font-black uppercase tracking-[0.2em] mb-2 ring-1 ring-indigo-500/30">
+            <Laptop className="h-3 w-3 text-orange-400" /> Featured Digital Tool
+          </div>
+          <p className="font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-100 to-indigo-300 text-2xl sm:text-3xl tracking-tight">
+            PROFPLAN
+          </p>
+          <p className="text-indigo-200 font-bold text-xs sm:text-sm mt-0.5 tracking-wide">
+            E-Lesson Plan-cum-Progress Register
+          </p>
+          <p className="text-orange-400 font-extrabold text-[11px] mt-2 uppercase tracking-wider">
+            A Gift to the Teaching Fraternity
+          </p>
+          <p className="text-slate-300 text-[11px] font-medium tracking-wider mt-0.5 italic">
+            Plan &bull; Teach &bull; Record &bull; Progress
+          </p>
+        </div>
 
-                {/* Feature Highlights Grid */}
-                <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
-                    <Link href="/syllabus" onClick={handleLaunch} className="block rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm hover:border-indigo-500/50 transition cursor-pointer">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-300 mb-2">
-                            <BookOpen className="h-4 w-4" />
-                        </div>
-                        <h3 className="text-xs font-bold text-white">Syllabus Management</h3>
-                        <p className="mt-0.5 text-[11px] text-slate-400">Configure semesters, papers, and learning units easily.</p>
-                    </Link>
+        {/* Primary Call-to-Action Suite */}
+        <div className="mt-5 max-w-sm mx-auto w-full space-y-2">
+          <button
+            type="button"
+            onClick={isOnboarded ? handleDirectWorkspace : handleLaunchSetup}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 py-3.5 px-5 text-sm font-extrabold text-white shadow-lg shadow-indigo-950/60 hover:-translate-y-0.5 transition cursor-pointer"
+          >
+            <span>{isOnboarded ? `Continue as ${userName}` : 'Get Started (Free Setup)'}</span>
+            <ArrowRight className="h-4 w-4" />
+          </button>
 
-                    <Link href="/timetable" onClick={handleLaunch} className="block rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm hover:border-indigo-500/50 transition cursor-pointer">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/20 text-violet-300 mb-2">
-                            <Users className="h-4 w-4" />
-                        </div>
-                        <h3 className="text-xs font-bold text-white">Weekly Routine</h3>
-                        <p className="mt-0.5 text-[11px] text-slate-400">Map instructional periods with conflict checking.</p>
-                    </Link>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setShowSignInModal(true)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-white/20 bg-white/10 py-2.5 px-3 text-xs font-bold text-white hover:bg-white/15 transition cursor-pointer"
+            >
+              <LogIn className="h-3.5 w-3.5 text-indigo-300 shrink-0" />
+              <span className="truncate">Teacher Login</span>
+            </button>
 
-                    <Link href="/today" onClick={handleLaunch} className="block rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm hover:border-indigo-500/50 transition cursor-pointer">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-300 mb-2">
-                            <ShieldCheck className="h-4 w-4" />
-                        </div>
-                        <h3 className="text-xs font-bold text-white">Secure & Private</h3>
-                        <p className="mt-0.5 text-[11px] text-slate-400">Records remain secure and private on your device.</p>
-                    </Link>
-                </div>
+            <a
+              href={WHATSAPP_COMMUNITY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-emerald-500/30 bg-emerald-600/15 py-2.5 px-3 text-xs font-bold text-emerald-300 hover:bg-emerald-600/25 transition truncate"
+            >
+              <MessageCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+              <span className="truncate">WhatsApp Group</span>
+            </a>
+          </div>
+        </div>
 
-                {/* Statutory Trust Badges Bar */}
-                <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-xs text-indigo-200">
-                    <span className="inline-flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
-                        <FileCheck2 className="h-3.5 w-3.5 text-emerald-400" /> 12AB & 80G Tax-Exempt Status
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
-                        <Building2 className="h-3.5 w-3.5 text-orange-400" /> CIN: U85500OD2024NPL046895
-                    </span>
-                </div>
+        {/* ============================================================
+            DIGNIFIED MEMORIAL DEDICATION: LATE CHARUMANI PARIDA
+        ============================================================ */}
+        <div className="mt-6 max-w-xl mx-auto rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-white/[0.04] to-amber-500/10 p-3.5 sm:p-4 backdrop-blur-md shadow-lg shadow-black/25 text-left">
+          <div className="flex items-center gap-3.5 sm:gap-4">
+            
+            {/* Framed Memorial Portrait */}
+            <div className="relative h-16 w-16 sm:h-20 sm:w-20 shrink-0 overflow-hidden rounded-full ring-2 ring-amber-400 shadow-md shadow-amber-950/50 bg-slate-950">
+              <img
+                src="/charumani-parida.png"
+                alt="Late Charumani Parida"
+                className="h-full w-full object-cover [object-position:50%_18%] scale-135"
+              />
             </div>
 
-            {/* Footer with corporate office address, phone number, and branding */}
-            <footer className="max-w-5xl mx-auto w-full pt-5 border-t border-white/10 flex flex-col md:flex-row items-center justify-between text-xs text-slate-400 gap-3">
-                <div className="text-center sm:text-left">
-                    <p>© {new Date().getFullYear()} APNSIR Foundation Initiative. All rights reserved.</p>
-                    <p className="text-indigo-300 font-bold tracking-wider mt-0.5">
-                        OdishaTeachers<span className="text-orange-500">.com</span> | APNSIR FOUNDATION
-                    </p>
-                </div>
+            {/* Memorial Inscription */}
+            <div className="min-w-0 flex-1">
+              <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.16em] text-amber-400">
+                In Loving Memory &amp; Dedication
+              </p>
 
-                <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-right">
-                    <div className="flex items-center gap-1 text-slate-300">
-                        <MapPin className="h-3.5 w-3.5 text-orange-400 shrink-0" />
-                        <span>{corporateAddress}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-indigo-300 font-bold">
-                        <Phone className="h-3.5 w-3.5 text-emerald-400" />
-                        <span>{phoneNumber}</span>
-                    </div>
-                </div>
-            </footer>
+              <h3 className="text-sm sm:text-base font-extrabold text-white tracking-tight mt-0.5">
+                Late Charumani Parida
+              </h3>
+
+              <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed mt-0.5">
+                Founder, <strong className="text-slate-100 font-semibold">SEVA English Medium School</strong>. An inspiring teacher and dedicated social reformer who devoted her life to education and service across remote Kandhamal.
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+      </main>
+
+      {/* ============================================================
+          3. SIGN IN MODAL FOR RETURNING TEACHERS
+      ============================================================ */}
+      {showSignInModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-md rounded-3xl border border-white/20 bg-slate-900 p-6 shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setShowSignInModal(false)}
+              className="absolute right-4 top-4 rounded-xl p-1.5 text-slate-400 hover:bg-white/10 hover:text-white transition cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="text-center pt-2">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600/20 text-indigo-400 ring-1 ring-indigo-500/30 mb-3">
+                <LogIn className="h-6 w-6" />
+              </div>
+              <h3 className="text-lg font-black text-white">Teacher Login</h3>
+              <p className="mt-1 text-xs text-slate-400">
+                Access your existing timetable and saved teaching records.
+              </p>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                className="w-full flex items-center justify-center gap-3 rounded-2xl border border-slate-700 bg-white px-4 py-3.5 text-xs font-bold text-slate-900 shadow-md hover:bg-slate-100 transition cursor-pointer"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>Continue with Google Account</span>
+              </button>
+
+              <div className="relative my-4 text-center">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
+                <span className="relative bg-slate-900 px-3 text-[10px] font-bold uppercase text-slate-500">Or enter registered phone</span>
+              </div>
+
+              <input
+                type="tel"
+                maxLength={10}
+                placeholder="10-digit registered WhatsApp / Phone"
+                className="w-full rounded-xl border border-slate-700 bg-white/5 px-4 py-3 text-xs font-semibold text-white placeholder:text-slate-500 outline-none focus:border-indigo-500"
+              />
+
+              <button
+                type="button"
+                onClick={handleDirectWorkspace}
+                className="w-full rounded-xl bg-indigo-600 py-3 text-xs font-bold text-white hover:bg-indigo-500 transition cursor-pointer"
+              >
+                Find My Workspace
+              </button>
+            </div>
+
+            <p className="mt-4 text-center text-[10px] text-slate-400">
+              New to ProfPlan?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSignInModal(false);
+                  handleLaunchSetup();
+                }}
+                className="font-bold text-indigo-400 hover:underline cursor-pointer"
+              >
+                Click Get Started to set up your plan
+              </button>
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================
+          4. FOOTER: DIGNIFIED & LEGALLY COHERENT
+      ============================================================ */}
+      <footer className="max-w-4xl mx-auto w-full pt-5 pb-3 border-t border-white/10 text-xs text-slate-400">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
+          
+          {/* Entity Identification & Direct Credentials */}
+          <div className="space-y-1.5">
+            <p className="text-white font-bold tracking-wide text-sm">
+              OdishaTeachers<span className="text-orange-500">.com</span>
+            </p>
+            
+            <p className="text-slate-300 text-[11px]">
+              An Initiative of <span className="text-indigo-300 font-bold">APNSIR Foundation</span> (A Registered Section 8 Non-Profit Company)
+            </p>
+
+            {/* Statutory credentials directly anchored to APNSIR Foundation */}
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-2.5 gap-y-1 text-[10px] text-slate-400">
+              <span className="inline-flex items-center gap-1">
+                <Building2 className="h-3 w-3 text-indigo-400 shrink-0" />
+                <span>CIN:</span>
+                <span className="font-mono text-slate-200">U85500OD2024NPL046895</span>
+              </span>
+
+              <span className="text-white/20">&bull;</span>
+
+              <span className="inline-flex items-center gap-1">
+                <Award className="h-3 w-3 text-indigo-400 shrink-0" />
+                <span>Licence:</span>
+                <span className="font-mono text-slate-200">160609</span>
+              </span>
+
+              <span className="text-white/20">&bull;</span>
+
+              <span className="inline-flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3 text-emerald-400 shrink-0" />
+                <span className="font-medium text-emerald-300">12AB &amp; 80G Registered NGO</span>
+              </span>
+            </div>
+
+            <p className="text-slate-500 text-[10px] pt-0.5">
+              &copy; {new Date().getFullYear()} APNSIR Foundation. All rights reserved.
+            </p>
+          </div>
+
+          {/* Registered Corporate Address */}
+          <div className="flex items-start md:items-center gap-1.5 text-slate-300 max-w-xs text-center md:text-right shrink-0">
+            <MapPin className="h-3.5 w-3.5 text-orange-400 shrink-0 mt-0.5 md:mt-0" />
+            <span className="text-[11px] leading-snug">{corporateAddress}</span>
+          </div>
 
         </div>
-    );
+      </footer>
+
+    </div>
+  );
 }
