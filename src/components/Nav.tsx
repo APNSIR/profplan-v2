@@ -202,10 +202,15 @@ export default function Nav() {
         </div>
       </aside>
 
-      {/* 5. GLOBAL DATA HUB MODAL */}
+      {/* 5. GLOBAL DATA HUB MODAL WITH ACTIVE PAGE BROADCAST */}
       <DataHubModal
         isOpen={isDataHubOpen}
-        onClose={() => setIsDataHubOpen(false)}
+        onClose={() => {
+          setIsDataHubOpen(false);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('profplan-change'));
+          }
+        }}
       />
     </>
   );

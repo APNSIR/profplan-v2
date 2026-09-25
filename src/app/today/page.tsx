@@ -303,7 +303,7 @@ export default function TodayPage() {
     };
 
     // ---------------------------------------------------------
-    // 2. TODAY'S TIMETABLE PERIODS (RESOLVED: CASE, WHITESPACE, NUMERIC)
+    // 2. TODAY'S TIMETABLE PERIODS
     // ---------------------------------------------------------
     const todaySlots = useMemo(() => {
         if (!d?.slots || !Array.isArray(d.slots)) {
@@ -317,11 +317,9 @@ export default function TodayPage() {
                 const rawDayStr = String(s.day).trim().toLowerCase();
                 const currentDayLower = dayName.toLowerCase();
 
-                // String match: full ("thursday") or 3-letter abbreviation ("thu")
                 if (rawDayStr === currentDayLower) return true;
                 if (rawDayStr.length >= 3 && currentDayLower.startsWith(rawDayStr.slice(0, 3))) return true;
 
-                // Numeric match: JS getDay() [0..6] or ISO weekday [1..7]
                 const numericDay = Number(s.day);
                 if (!Number.isNaN(numericDay)) {
                     if (numericDay === dayNumber) return true;
@@ -364,7 +362,7 @@ export default function TodayPage() {
     }, [d.logs, todayDateStr]);
 
     // ---------------------------------------------------------
-    // COMPLETED SCHEDULED PERIOD IDs (for button toggling)
+    // COMPLETED SCHEDULED PERIOD IDs
     // ---------------------------------------------------------
     const doneSlotIds = useMemo(() => {
         if (!d?.logs || !Array.isArray(d.logs)) {
@@ -377,7 +375,7 @@ export default function TodayPage() {
     }, [d.logs, todayDateStr]);
 
     // ---------------------------------------------------------
-    // 3. ALL COMPLETED CLASSES TODAY (RESOLVED: SCHEDULED + EXTRA)
+    // 3. ALL COMPLETED CLASSES TODAY
     // ---------------------------------------------------------
     const allCompletedLogsToday = useMemo(() => {
         if (!d?.logs || !Array.isArray(d.logs)) return [];
@@ -388,7 +386,6 @@ export default function TodayPage() {
         );
     }, [d.logs, todayDateStr]);
 
-    // Total completed count (includes extra sessions)
     const totalClassesCompletedCount = allCompletedLogsToday.length;
 
     // ---------------------------------------------------------
@@ -403,20 +400,15 @@ export default function TodayPage() {
     }, [allCompletedLogsToday]);
 
     // ---------------------------------------------------------
-    // 3. DAILY COMPLETION RATE (RESOLVED: ACCURATE PROGRESS)
+    // DAILY COMPLETION RATE
     // ---------------------------------------------------------
     const completionRate = useMemo(() => {
         if (todaySlots.length > 0) {
-            // Percent of scheduled slots finished
             return Math.min(100, Math.round((doneSlotIds.length / todaySlots.length) * 100));
         }
-        // If no scheduled slots today, but extra classes were taken, progress is 100%
         return totalClassesCompletedCount > 0 ? 100 : 0;
     }, [todaySlots.length, doneSlotIds.length, totalClassesCompletedCount]);
 
-    // ---------------------------------------------------------
-    // COURSE HELPERS
-    // ---------------------------------------------------------
     const getCourse = (id: string) =>
         (d.courses || []).find((c: any) => c.id === id);
 
@@ -525,7 +517,7 @@ export default function TodayPage() {
     };
 
     // ---------------------------------------------------------
-    // 4. SAVE QUICK LOG (RESOLVED: PROPER TOPIC FALLBACK)
+    // SAVE QUICK LOG
     // ---------------------------------------------------------
     const handleSaveQuickLog = (e: React.FormEvent) => {
         e.preventDefault();
@@ -542,7 +534,6 @@ export default function TodayPage() {
                 (t: any) => t.id === selectedTopicId
             );
 
-            // Priority: Dropdown selected topic > custom text typed > fallback
             const typedTopic = topicCovered.trim();
             const resolvedPlannedName =
                 plannedTopicObj?.name ||
@@ -613,9 +604,6 @@ export default function TodayPage() {
         }
     };
 
-    // ---------------------------------------------------------
-    // LOADING
-    // ---------------------------------------------------------
     if (!mounted) {
         return (
             <div className="flex min-h-[50vh] items-center justify-center">
@@ -645,9 +633,7 @@ export default function TodayPage() {
                 </div>
             )}
 
-            {/* =====================================================
-                1. HERO BANNER
-            ===================================================== */}
+            {/* HERO BANNER */}
             <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 p-6 md:p-8 text-white shadow-xl">
                 <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-5">
                     <div className="flex items-center gap-4">
@@ -686,7 +672,6 @@ export default function TodayPage() {
                         </div>
                     </div>
 
-                    {/* HERO DATA HUB ACTION */}
                     <div className="flex items-center gap-2.5">
                         <button
                             type="button"
@@ -700,9 +685,7 @@ export default function TodayPage() {
                 </div>
             </section>
 
-            {/* =====================================================
-                2. FIRST-TIME SETUP CALLOUT
-            ===================================================== */}
+            {/* FIRST-TIME SETUP CALLOUT */}
             {isFirstTimeUser && (
                 <div className="rounded-3xl border-2 border-blue-600/40 bg-gradient-to-br from-blue-50 via-indigo-50/60 to-white p-6 md:p-7 shadow-md animate-in fade-in zoom-in-95">
                     <div className="flex items-center gap-2 mb-2">
@@ -719,7 +702,6 @@ export default function TodayPage() {
                     </p>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                        {/* STEP 1 */}
                         <button
                             type="button"
                             onClick={openAddClassModal}
@@ -741,7 +723,6 @@ export default function TodayPage() {
                             <Plus className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition" />
                         </button>
 
-                        {/* STEP 2 */}
                         <Link
                             href="/syllabus"
                             className="flex items-center justify-between p-4 bg-white rounded-2xl border-2 border-indigo-200 hover:border-indigo-600 hover:shadow-md transition group"
@@ -762,7 +743,6 @@ export default function TodayPage() {
                             <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition" />
                         </Link>
 
-                        {/* STEP 3 */}
                         <Link
                             href="/timetable"
                             className="flex items-center justify-between p-4 bg-white rounded-2xl border-2 border-purple-200 hover:border-purple-600 hover:shadow-md transition group"
@@ -811,9 +791,7 @@ export default function TodayPage() {
                 </div>
             )}
 
-            {/* =====================================================
-                MODAL: ADD CLASSES / SEMESTERS
-            ===================================================== */}
+            {/* MODAL: ADD CLASSES / SEMESTERS */}
             {isAddClassModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
                     <div className="w-full max-w-lg max-h-[92vh] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col">
@@ -1048,9 +1026,7 @@ export default function TodayPage() {
                 </div>
             )}
 
-            {/* =====================================================
-                3. PRIMARY ACTION TOOLBAR
-            ===================================================== */}
+            {/* PRIMARY ACTION TOOLBAR */}
             <section className="space-y-3">
                 {isFirstTimeUser && (
                     <div className="px-1">
@@ -1172,9 +1148,7 @@ export default function TodayPage() {
                 </div>
             </section>
 
-            {/* =====================================================
-                4. HOLIDAY ALERT
-            ===================================================== */}
+            {/* HOLIDAY ALERT */}
             {todayHoliday && (
                 <div className="rounded-3xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-3.5">
@@ -1223,9 +1197,7 @@ export default function TodayPage() {
                 </div>
             )}
 
-            {/* =====================================================
-                5. SUSPENSION / NOTICE
-            ===================================================== */}
+            {/* SUSPENSION / NOTICE */}
             {existingSuspensionLog && !todayHoliday && (
                 <div className="rounded-3xl border-2 border-rose-300 bg-gradient-to-r from-rose-50 via-orange-50 to-rose-50 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-3.5">
@@ -1256,9 +1228,7 @@ export default function TodayPage() {
                 </div>
             )}
 
-            {/* =====================================================
-                6. METRICS (RESOLVED: COUNTS ROUTINE + EXTRA CLASSES)
-            ===================================================== */}
+            {/* METRICS */}
             <section className="space-y-3">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex items-center justify-between">
@@ -1319,9 +1289,7 @@ export default function TodayPage() {
                 </div>
             </section>
 
-            {/* =====================================================
-                7. TODAY'S SCHEDULE
-            ===================================================== */}
+            {/* TODAY'S SCHEDULE */}
             <section className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
                     <div>
@@ -1334,7 +1302,6 @@ export default function TodayPage() {
                     </div>
 
                     <div className="flex items-center flex-wrap gap-2">
-                        {/* REGISTER CSV EXPORT SHORTCUT */}
                         <button
                             type="button"
                             onClick={() => setIsDataHubOpen(true)}
@@ -1498,9 +1465,7 @@ export default function TodayPage() {
                 )}
             </section>
 
-            {/* =====================================================
-                EXTRA / UNSCHEDULED CLASSES
-            ===================================================== */}
+            {/* EXTRA / UNSCHEDULED CLASSES */}
             {todayExtraClasses.length > 0 && (
                 <div className="mt-5 space-y-3">
                     <div className="flex items-center gap-2 px-1">
@@ -1587,9 +1552,7 @@ export default function TodayPage() {
                 </div>
             )}
 
-            {/* =====================================================
-                8. MODAL: SUSPEND TODAY'S TEACHING
-            ===================================================== */}
+            {/* MODAL: SUSPEND TODAY'S TEACHING */}
             {isSuspendModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
                     <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
@@ -1661,9 +1624,7 @@ export default function TodayPage() {
                 </div>
             )}
 
-            {/* =====================================================
-                9. MODAL: QUICK LOG
-            ===================================================== */}
+            {/* MODAL: QUICK LOG */}
             {activeSlot && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
                     <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
@@ -1789,12 +1750,14 @@ export default function TodayPage() {
                 </div>
             )}
 
-            {/* =====================================================
-                10. MODAL: ACADEMIC DATA & BACKUP HUB
-            ===================================================== */}
+            {/* MODAL: ACADEMIC DATA & BACKUP HUB */}
             <DataHubModal
                 isOpen={isDataHubOpen}
-                onClose={() => setIsDataHubOpen(false)}
+                onClose={() => {
+                    setIsDataHubOpen(false);
+                    const latest = load();
+                    if (latest) setD(latest);
+                }}
             />
         </div>
     );
