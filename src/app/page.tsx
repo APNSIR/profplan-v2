@@ -37,15 +37,33 @@ export default function Home() {
 
   useEffect(() => {
     try {
+      // 1. Check profplan_profile
       const storedProfile = localStorage.getItem('profplan_profile');
+      let foundOnboarded = false;
+
       if (storedProfile) {
         const parsed = JSON.parse(storedProfile);
-        if (parsed?.onboarded) {
-          setIsOnboarded(true);
+        if (parsed?.onboarded || parsed?.name) {
+          foundOnboarded = true;
           setUserName(parsed.name || 'Teacher');
-        } else {
-          localStorage.setItem('profplan_landing_active', 'true');
         }
+      }
+
+      // 2. Also check profplan_data (if teacher already created timetable/classes)
+      const storedData = localStorage.getItem('profplan_data');
+      if (storedData) {
+        const parsedData = JSON.parse(storedData);
+        if (
+          (parsedData?.classes && parsedData.classes.length > 0) ||
+          (parsedData?.slots && parsedData.slots.length > 0)
+        ) {
+          foundOnboarded = true;
+          if (!userName) setUserName('Teacher');
+        }
+      }
+
+      if (foundOnboarded) {
+        setIsOnboarded(true);
       } else {
         localStorage.setItem('profplan_landing_active', 'true');
       }
@@ -56,11 +74,16 @@ export default function Home() {
     return () => {
       localStorage.removeItem('profplan_landing_active');
     };
-  }, []);
+  }, [userName]);
 
   const handleLaunchSetup = () => {
     localStorage.removeItem('profplan_landing_active');
-    router.push('/timetable?setup=1');
+    // If already has classes or slots, always route to /today
+    if (isOnboarded) {
+      router.push('/today');
+    } else {
+      router.push('/today');
+    }
   };
 
   const handleDirectWorkspace = () => {
@@ -70,10 +93,9 @@ export default function Home() {
 
   const handleGoogleSignIn = () => {
     setIsConnecting(true);
-    // Smooth transition directly to dashboard without browser alert
     setTimeout(() => {
       handleDirectWorkspace();
-    }, 600);
+    }, 400);
   };
 
   const handlePhoneSubmit = (e: React.FormEvent) => {
@@ -152,7 +174,7 @@ export default function Home() {
 
         {/* Featured Product: PROFPLAN */}
         <div 
-          onClick={isOnboarded ? handleDirectWorkspace : handleLaunchSetup}
+          onClick={handleDirectWorkspace}
           className="group block mt-6 text-slate-200 max-w-xl mx-auto leading-relaxed bg-gradient-to-b from-white/[0.09] to-white/[0.04] border border-white/20 p-5 sm:p-6 rounded-[1.75rem] backdrop-blur-xl shadow-[0_16px_40px_rgba(0,0,0,0.45)] transition duration-300 hover:-translate-y-0.5 hover:border-indigo-500/60 hover:shadow-indigo-500/10 cursor-pointer text-center relative overflow-hidden"
         >
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[9px] font-black uppercase tracking-[0.2em] mb-2 ring-1 ring-indigo-500/30">
@@ -176,10 +198,10 @@ export default function Home() {
         <div className="mt-5 max-w-sm mx-auto w-full space-y-2">
           <button
             type="button"
-            onClick={isOnboarded ? handleDirectWorkspace : handleLaunchSetup}
+            onClick={handleDirectWorkspace}
             className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 py-3.5 px-5 text-sm font-extrabold text-white shadow-lg shadow-indigo-950/60 hover:-translate-y-0.5 transition cursor-pointer"
           >
-            <span>{isOnboarded ? `Continue as ${userName}` : 'Get Started (Free Setup)'}</span>
+            <span>{isOnboarded ? `Continue as ${userName}` : 'Open Daily Dashboard'}</span>
             <ArrowRight className="h-4 w-4" />
           </button>
 
@@ -360,11 +382,11 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   setShowSignInModal(false);
-                  handleLaunchSetup();
+                  handleDirectWorkspace();
                 }}
                 className="font-bold text-indigo-400 hover:underline cursor-pointer"
               >
-                Click Get Started to set up your plan
+                Go directly to Today Dashboard
               </button>
             </p>
           </div>
