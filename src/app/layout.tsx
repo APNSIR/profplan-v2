@@ -1,6 +1,7 @@
 'use client';
 
 import './globals.css';
+import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -8,6 +9,7 @@ import Nav from '@/components/Nav';
 import OnboardingModal from '@/components/OnboardingModal';
 import HeaderProfileWidget from '@/components/HeaderProfileWidget';
 import { getCurrentAcademicSession } from '@/lib/store';
+import { migrateFromLocalStorageIfNeeded } from '@/lib/migration';
 
 export default function RootLayout({
   children,
@@ -17,11 +19,50 @@ export default function RootLayout({
   const pathname = usePathname();
   const academicSession = getCurrentAcademicSession();
 
+  useEffect(() => {
+    // 1. Run initial migration from localStorage into IndexedDB on mount
+    migrateFromLocalStorageIfNeeded();
+
+    // 2. Register Service Worker for Offline PWA Support
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker
+          .register('/sw.js')
+          .then((registration) => {
+            console.log('✅ ProfPlan PWA ServiceWorker active with scope:', registration.scope);
+          })
+          .catch((error) => {
+            console.error('⚠️ ProfPlan ServiceWorker registration failed:', error);
+          });
+      });
+    }
+  }, []);
+
   // Check if the user is on the home/landing page
   const isHomePage = pathname === '/';
 
   return (
     <html lang="en">
+      <head>
+        <title>ProfPlan - Academic Register</title>
+        <meta
+          name="description"
+          content="Teacher-Centric Lesson Planner, Timetable Manager & Academic Progress Register by APNSIR Foundation"
+        />
+
+        {/* PWA & Mobile Install Meta Tags */}
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="theme-color" content="#020617" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="ProfPlan" />
+        <link rel="apple-touch-icon" href="/apnsir-logo.png" />
+
+        {/* Google Identity Services (GIS) Client for Zero-Cost Drive Sync */}
+        <script src="https://accounts.google.com/gsi/client" async defer></script>
+      </head>
+
       <body
         className={
           isHomePage

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { load, save, ProfPlanData } from '@/lib/store';
+import DataHubModal from '@/components/DataHubModal';
 import {
     Calendar,
     Clock,
@@ -25,7 +26,9 @@ import {
     ShieldAlert,
     Layers,
     Trash2,
-    BarChart3
+    BarChart3,
+    ShieldCheck,
+    Download
 } from 'lucide-react';
 
 export default function TodayPage() {
@@ -43,6 +46,11 @@ export default function TodayPage() {
 
     const [activeSlot, setActiveSlot] = useState<any>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+    // ---------------------------------------------------------
+    // 1. DATA HUB MODAL (BACKUP & REGISTER EXPORT)
+    // ---------------------------------------------------------
+    const [isDataHubOpen, setIsDataHubOpen] = useState(false);
 
     // ---------------------------------------------------------
     // ADD CLASS / SEMESTER MODAL
@@ -126,7 +134,7 @@ export default function TodayPage() {
         return `${year}-${month}-${day}`;
     }, [currentDate]);
 
-    const dayNumber = currentDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 4 = Thursday
+    const dayNumber = currentDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
 
     const dayName = useMemo(() => {
         const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -295,7 +303,7 @@ export default function TodayPage() {
     };
 
     // ---------------------------------------------------------
-    // TODAY'S TIMETABLE PERIODS (FIXED FOR STRING & NUMBER MATCH)
+    // 2. TODAY'S TIMETABLE PERIODS (RESOLVED: CASE, WHITESPACE, NUMERIC)
     // ---------------------------------------------------------
     const todaySlots = useMemo(() => {
         if (!d?.slots || !Array.isArray(d.slots)) {
@@ -309,15 +317,14 @@ export default function TodayPage() {
                 const rawDayStr = String(s.day).trim().toLowerCase();
                 const currentDayLower = dayName.toLowerCase();
 
-                // 1. Matches string representations ("thursday", "thu")
+                // String match: full ("thursday") or 3-letter abbreviation ("thu")
                 if (rawDayStr === currentDayLower) return true;
-                if (rawDayStr.slice(0, 3) === currentDayLower.slice(0, 3)) return true;
+                if (rawDayStr.length >= 3 && currentDayLower.startsWith(rawDayStr.slice(0, 3))) return true;
 
-                // 2. Matches numeric representations (0=Sun, 1=Mon, ..., 4=Thu)
+                // Numeric match: JS getDay() [0..6] or ISO weekday [1..7]
                 const numericDay = Number(s.day);
                 if (!Number.isNaN(numericDay)) {
                     if (numericDay === dayNumber) return true;
-                    // ISO format (Monday = 1 ... Sunday = 7)
                     const isoDay = dayNumber === 0 ? 7 : dayNumber;
                     if (numericDay === isoDay) return true;
                 }
@@ -357,7 +364,7 @@ export default function TodayPage() {
     }, [d.logs, todayDateStr]);
 
     // ---------------------------------------------------------
-    // COMPLETED PERIODS
+    // COMPLETED SCHEDULED PERIOD IDs (for button toggling)
     // ---------------------------------------------------------
     const doneSlotIds = useMemo(() => {
         if (!d?.logs || !Array.isArray(d.logs)) {
@@ -370,31 +377,42 @@ export default function TodayPage() {
     }, [d.logs, todayDateStr]);
 
     // ---------------------------------------------------------
+    // 3. ALL COMPLETED CLASSES TODAY (RESOLVED: SCHEDULED + EXTRA)
+    // ---------------------------------------------------------
+    const allCompletedLogsToday = useMemo(() => {
+        if (!d?.logs || !Array.isArray(d.logs)) return [];
+        return d.logs.filter(
+            (l: any) =>
+                l.date === todayDateStr &&
+                (l.status === 'Taken' || l.status === 'Compensated')
+        );
+    }, [d.logs, todayDateStr]);
+
+    // Total completed count (includes extra sessions)
+    const totalClassesCompletedCount = allCompletedLogsToday.length;
+
+    // ---------------------------------------------------------
     // TODAY'S DELIVERED HOURS
     // ---------------------------------------------------------
     const todayDeliveredHours = useMemo(() => {
-        if (!d?.logs || !Array.isArray(d.logs)) {
-            return '0.00';
-        }
-
-        const sum = d.logs
-            .filter(
-                (l: any) =>
-                    l.date === todayDateStr &&
-                    (l.status === 'Taken' || l.status === 'Compensated')
-            )
-            .reduce(
-                (acc: number, curr: any) => acc + (Number(curr.hours) || 0),
-                0
-            );
-
+        const sum = allCompletedLogsToday.reduce(
+            (acc: number, curr: any) => acc + (Number(curr.hours) || 0),
+            0
+        );
         return sum.toFixed(2);
-    }, [d.logs, todayDateStr]);
+    }, [allCompletedLogsToday]);
 
-    const completionRate =
-        todaySlots.length > 0
-            ? Math.round((doneSlotIds.length / todaySlots.length) * 100)
-            : 0;
+    // ---------------------------------------------------------
+    // 3. DAILY COMPLETION RATE (RESOLVED: ACCURATE PROGRESS)
+    // ---------------------------------------------------------
+    const completionRate = useMemo(() => {
+        if (todaySlots.length > 0) {
+            // Percent of scheduled slots finished
+            return Math.min(100, Math.round((doneSlotIds.length / todaySlots.length) * 100));
+        }
+        // If no scheduled slots today, but extra classes were taken, progress is 100%
+        return totalClassesCompletedCount > 0 ? 100 : 0;
+    }, [todaySlots.length, doneSlotIds.length, totalClassesCompletedCount]);
 
     // ---------------------------------------------------------
     // COURSE HELPERS
@@ -507,7 +525,7 @@ export default function TodayPage() {
     };
 
     // ---------------------------------------------------------
-    // SAVE QUICK LOG
+    // 4. SAVE QUICK LOG (RESOLVED: PROPER TOPIC FALLBACK)
     // ---------------------------------------------------------
     const handleSaveQuickLog = (e: React.FormEvent) => {
         e.preventDefault();
@@ -524,24 +542,28 @@ export default function TodayPage() {
                 (t: any) => t.id === selectedTopicId
             );
 
+            // Priority: Dropdown selected topic > custom text typed > fallback
+            const typedTopic = topicCovered.trim();
+            const resolvedPlannedName =
+                plannedTopicObj?.name ||
+                plannedTopicObj?.title ||
+                (typedTopic ? typedTopic : 'General / Unplanned');
+
+            const resolvedCovered = typedTopic || resolvedPlannedName;
+
             const newLog: any = {
                 id: 'log_' + Date.now(),
                 date: todayDateStr,
                 slotId: activeSlot.id,
                 courseId: activeSlot.courseId,
                 topicId: selectedTopicId || '',
-                plannedTopicName:
-                    plannedTopicObj?.name || plannedTopicObj?.title || 'General / Unplanned',
+                plannedTopicName: resolvedPlannedName,
                 status: status as any,
                 classSource: 'Scheduled Class',
                 type: 'Regular Lecture',
                 actualStart: activeSlot.start,
                 actualEnd: activeSlot.end,
-                covered:
-                    topicCovered.trim() ||
-                    plannedTopicObj?.name ||
-                    plannedTopicObj?.title ||
-                    'Class delivered as per schedule',
+                covered: resolvedCovered,
                 hours: calculatedHours,
                 attendance: attendance ? Number(attendance) : undefined,
                 remarks: remarks.trim()
@@ -662,6 +684,18 @@ export default function TodayPage() {
                                 Daily Teaching Routine &amp; Progress Register
                             </p>
                         </div>
+                    </div>
+
+                    {/* HERO DATA HUB ACTION */}
+                    <div className="flex items-center gap-2.5">
+                        <button
+                            type="button"
+                            onClick={() => setIsDataHubOpen(true)}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-md text-white font-extrabold text-xs shadow-md transition transform active:scale-95"
+                        >
+                            <ShieldCheck className="w-4 h-4 text-emerald-300" />
+                            Backup &amp; Export Hub
+                        </button>
                     </div>
                 </div>
             </section>
@@ -1223,7 +1257,7 @@ export default function TodayPage() {
             )}
 
             {/* =====================================================
-                6. METRICS
+                6. METRICS (RESOLVED: COUNTS ROUTINE + EXTRA CLASSES)
             ===================================================== */}
             <section className="space-y-3">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -1250,7 +1284,7 @@ export default function TodayPage() {
                                 Classes Completed
                             </span>
                             <p className="mt-1 text-3xl font-black text-emerald-600">
-                                {doneSlotIds.length}
+                                {totalClassesCompletedCount}
                             </p>
                             <p className="text-xs text-slate-500 mt-0.5">
                                 {todayDeliveredHours} teaching hours
@@ -1299,7 +1333,17 @@ export default function TodayPage() {
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center flex-wrap gap-2">
+                        {/* REGISTER CSV EXPORT SHORTCUT */}
+                        <button
+                            type="button"
+                            onClick={() => setIsDataHubOpen(true)}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 rounded-xl border border-slate-200 transition shadow-sm"
+                        >
+                            <Download className="w-3.5 h-3.5 text-slate-500" />
+                            Export Register
+                        </button>
+
                         <Link
                             href="/timetable"
                             className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-blue-900 bg-blue-50 hover:bg-blue-100 rounded-xl border border-blue-200 transition shadow-sm"
@@ -1744,6 +1788,14 @@ export default function TodayPage() {
                     </div>
                 </div>
             )}
+
+            {/* =====================================================
+                10. MODAL: ACADEMIC DATA & BACKUP HUB
+            ===================================================== */}
+            <DataHubModal
+                isOpen={isDataHubOpen}
+                onClose={() => setIsDataHubOpen(false)}
+            />
         </div>
     );
 }
