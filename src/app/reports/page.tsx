@@ -1,11 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { load, save, ProfPlanData } from '@/lib/store';
+import { load, save, loadProfile, ProfPlanData, UserProfile } from '@/lib/store';
 import PageGuide from '@/components/PageGuide';
 import {
     FileSpreadsheet,
@@ -21,10 +19,9 @@ import {
     Printer,
     Calendar,
     Clock,
-    BookOpen,
-    CheckCircle2,
     Layers,
-    UserCheck
+    UserCheck,
+    Download
 } from 'lucide-react';
 
 export default function Reports() {
@@ -40,6 +37,7 @@ export default function Reports() {
         holidays: [],
         classes: []
     });
+    const [profile, setProfile] = useState<UserProfile | null>(null);
 
     const [correctionMode, setCorrectionMode] = useState(false);
     const [showFilters, setShowFilters] = useState(false);
@@ -58,11 +56,19 @@ export default function Reports() {
         if (store) {
             setD(store);
         }
+        const userProf = loadProfile();
+        if (userProf) {
+            setProfile(userProf);
+        }
 
         const refresh = () => {
             const updated = load();
             if (updated) {
                 setD(updated);
+            }
+            const updatedProf = loadProfile();
+            if (updatedProf) {
+                setProfile(updatedProf);
             }
         };
 
@@ -76,26 +82,32 @@ export default function Reports() {
     }, []);
 
     const courses = useMemo(() => d?.courses || [], [d]);
+    const classes = useMemo(() => d?.classes || [], [d]);
     const logs = useMemo(() => d?.logs || [], [d]);
 
-    // Extract unique semesters from courses or logs
+    // Fast relational lookup maps (O(1) lookups)
+    const classMap = useMemo(() => new Map(classes.map((cls: any) => [cls.id, cls])), [classes]);
+    const courseMap = useMemo(() => new Map(courses.map((c: any) => [c.id, c])), [courses]);
+    const slotMap = useMemo(() => new Map((d.slots || []).map((s: any) => [s.id, s])), [d.slots]);
+
+    // Comprehensive unique classes / semesters set
     const semesters = useMemo(() => {
         const set = new Set<string>();
 
         courses.forEach((c: any) => {
-            if (c.semester) {
-                set.add(c.semester);
-            }
+            if (c.semester) set.add(c.semester);
+        });
+
+        classes.forEach((cls: any) => {
+            if (cls.name) set.add(cls.name);
         });
 
         logs.forEach((l: any) => {
-            if (l.semester) {
-                set.add(l.semester);
-            }
+            if (l.semester) set.add(l.semester);
         });
 
         return Array.from(set);
-    }, [courses, logs]);
+    }, [courses, classes, logs]);
 
     /* =====================================================
         FILTERED & CHRONOLOGICAL SORTING
@@ -108,29 +120,22 @@ export default function Reports() {
                 if (startDate && l.date < startDate) return false;
                 if (endDate && l.date > endDate) return false;
 
-                if (
-                    selectedCourseId !== 'ALL' &&
-                    l.courseId !== selectedCourseId
-                ) {
+                if (selectedCourseId !== 'ALL' && l.courseId !== selectedCourseId) {
                     return false;
                 }
 
                 if (selectedSemester !== 'ALL') {
-                    const course = courses.find(
-                        (c: any) => c.id === l.courseId
-                    );
-
+                    const course: any = courseMap.get(l.courseId);
+                    const classObj: any = course?.classId ? classMap.get(course.classId) : null;
                     const semMatch =
                         l.semester === selectedSemester ||
-                        course?.semester === selectedSemester;
+                        course?.semester === selectedSemester ||
+                        classObj?.name === selectedSemester;
 
                     if (!semMatch) return false;
                 }
 
-                if (
-                    selectedStatus !== 'ALL' &&
-                    l.status !== selectedStatus
-                ) {
+                if (selectedStatus !== 'ALL' && l.status !== selectedStatus) {
                     return false;
                 }
 
@@ -151,7 +156,8 @@ export default function Reports() {
             });
     }, [
         logs,
-        courses,
+        courseMap,
+        classMap,
         startDate,
         endDate,
         selectedCourseId,
@@ -192,31 +198,23 @@ export default function Reports() {
     /* =====================================================
         HELPERS & RECORD ACTIONS
     ===================================================== */
-
-    function courseName(courseId: string) {
-        return (
-            d.courses?.find(
-                (c: any) => c.id === courseId
-            )?.name || 'General / Special Class'
-        );
+    function resolveCourseName(courseId: string) {
+        return courseMap.get(courseId)?.name || 'General / Special Class';
     }
 
-    function courseCode(courseId: string) {
-        return (
-            d.courses?.find(
-                (c: any) => c.id === courseId
-            )?.code || ''
-        );
+    function resolveCourseCode(courseId: string) {
+        return courseMap.get(courseId)?.code || '';
     }
 
-    function courseSemester(log: any) {
-        return (
-            log.semester ||
-            d.courses?.find(
-                (c: any) => c.id === log.courseId
-            )?.semester ||
-            ''
-        );
+    function resolveClassInfo(log: any) {
+        const course: any = courseMap.get(log.courseId);
+        const classObj: any = course?.classId ? classMap.get(course.classId) : null;
+
+        if (classObj) {
+            return `${classObj.name}${classObj.stream ? ` (${classObj.stream})` : ''}`;
+        }
+
+        return log.semester || course?.semester || '';
     }
 
     function getPlannedTopicName(log: any) {
@@ -228,9 +226,8 @@ export default function Reports() {
             const topic = d.topics?.find(
                 (t: any) => t.id === log.topicId
             );
-
             if (topic) {
-                return topic.name;
+                return topic.name || topic.title;
             }
         }
 
@@ -245,245 +242,59 @@ export default function Reports() {
         );
     }
 
-    function slotForLog(slotId: string) {
-        return d.slots?.find(
-            (s: any) => s.id === slotId
-        );
-    }
-
     function openForCorrection(logId: string) {
-        router.push(
-            `/log?editId=${encodeURIComponent(logId)}`
-        );
+        router.push(`/log?editId=${encodeURIComponent(logId)}`);
     }
 
-    function deleteLogEntry(
-        logId: string,
-        e?: React.MouseEvent
-    ) {
+    function deleteLogEntry(logId: string, e?: React.MouseEvent) {
         if (e) {
             e.stopPropagation();
         }
 
-        const targetLog = (d.logs || []).find(
-            (l: any) => l.id === logId
-        );
-
+        const targetLog = (d.logs || []).find((l: any) => l.id === logId);
         const logDate = targetLog?.date || 'this';
-        const course = courseName(
-            targetLog?.courseId || ''
-        );
+        const course = resolveCourseName(targetLog?.courseId || '');
 
         const confirmed = window.confirm(
             `Are you sure you want to delete the class entry for "${course}" on ${logDate}?\n\nThis action cannot be undone.`
         );
 
-        if (!confirmed) {
-            return;
-        }
+        if (!confirmed) return;
 
-        const updatedLogs = (d.logs || []).filter(
-            (l: any) => l.id !== logId
-        );
-
-        const updatedData = {
-            ...d,
-            logs: updatedLogs
-        };
+        const updatedLogs = (d.logs || []).filter((l: any) => l.id !== logId);
+        const updatedData = { ...d, logs: updatedLogs };
 
         save(updatedData);
         setD(updatedData);
     }
 
     /* =====================================================
-        OFFICIAL EXCEL (.XLSX) EXPORT
+        DYNAMIC LAZY-LOADED EXPORTERS (Bundle Optimization)
     ===================================================== */
-    function exportExcel() {
+    async function handleExportExcel() {
         if (filteredLogs.length === 0) {
-            alert(
-                'No logs recorded to export for the selected filters.'
-            );
+            alert('No logs recorded to export for the selected filters.');
             return;
         }
-
-        const reportData = filteredLogs.map(
-            (l: any, index: number) => {
-                const slot = slotForLog(l.slotId) as any;
-
-                return {
-                    'Sl. No.': index + 1,
-                    Date: l.date || '',
-                    Period: slot?.period
-                        ? `Period ${slot.period}`
-                        : 'Extra Class',
-                    Time: `${l.actualStart || slot?.start || ''} - ${l.actualEnd || slot?.end || ''}`,
-                    'Course / Subject': `${courseName(l.courseId)} ${courseCode(l.courseId)
-                        ? `(${courseCode(l.courseId)})`
-                        : ''
-                        }`,
-                    'Semester / Class': courseSemester(l),
-                    'Planned Topic': getPlannedTopicName(l),
-                    'Actually Covered': getActuallyCovered(l),
-                    Status: l.status || '',
-                    'Contact Hours': Number(
-                        l.hours || 0
-                    ).toFixed(2),
-                    Attendance: l.attendance ?? '—',
-                    'Remarks / Deviations': l.remarks || ''
-                };
-            }
-        );
-
-        const worksheet = XLSX.utils.json_to_sheet(reportData);
-
-        worksheet['!cols'] = [
-            { wch: 8 },
-            { wch: 12 },
-            { wch: 14 },
-            { wch: 18 },
-            { wch: 30 },
-            { wch: 16 },
-            { wch: 28 },
-            { wch: 32 },
-            { wch: 12 },
-            { wch: 12 },
-            { wch: 12 },
-            { wch: 25 }
-        ];
-
-        XLSX.utils.sheet_add_aoa(
-            worksheet,
-            [
-                ['An Initiative by APNSIR FOUNDATION'],
-                ['Academic Lesson Planning & Daily Progress Register'],
-                []
-            ],
-            { origin: 'A1' }
-        );
-
-        const signatureRow = filteredLogs.length + 6;
-
-        XLSX.utils.sheet_add_aoa(
-            worksheet,
-            [
-                [
-                    'Signature of Teacher',
-                    '',
-                    '',
-                    'Signature of HOD',
-                    '',
-                    '',
-                    '',
-                    'Signature of Principal'
-                ]
-            ],
-            { origin: `A${signatureRow}` }
-        );
-
-        const workbook = XLSX.utils.book_new();
-
-        XLSX.utils.book_append_sheet(
-            workbook,
-            worksheet,
-            'Progress Register'
-        );
-
-        XLSX.writeFile(
-            workbook,
-            `APNSIR_ProfPlan_Register_${startDate || 'all'}_to_${endDate || 'all'}.xlsx`
-        );
+        const { exportLogsToExcel } = await import('@/lib/exportUtils');
+        const fileName = `ProfPlan_Register_${startDate || 'all'}_to_${endDate || 'all'}.xlsx`;
+        exportLogsToExcel(filteredLogs, d, fileName);
     }
 
-    /* =====================================================
-        OFFICIAL PDF EXPORT
-    ===================================================== */
-    function exportPDF() {
+    async function handleExportFullComplianceReport() {
+        const { exportComplianceReportToXLSX } = await import('@/lib/exportUtils');
+        exportComplianceReportToXLSX(d, profile);
+    }
+
+    async function handleExportPDF() {
         if (filteredLogs.length === 0) {
-            alert(
-                'No logs recorded to export for the selected filters.'
-            );
+            alert('No logs recorded to export for the selected filters.');
             return;
         }
-
-        const doc = new jsPDF({
-            orientation: 'landscape',
-            unit: 'mm',
-            format: 'a4'
-        });
-
-        doc.setFontSize(14);
-        doc.setFont('helvetica', 'bold');
-        doc.text('IN HUMBLE SERVICE TO OUR TEACHERS', 14, 15);
-
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        doc.text(
-            'APNSIR FOUNDATION · Academic Lesson Planning & Daily Progress Register',
-            14,
-            21
-        );
-
-        doc.setLineWidth(0.3);
-        doc.line(14, 26, 283, 26);
-
-        let y = 34;
-
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'bold');
-
-        doc.text('Sl.', 14, y);
-        doc.text('Date', 22, y);
-        doc.text('Period', 42, y);
-        doc.text('Subject / Code', 58, y);
-        doc.text('Planned Topic', 105, y);
-        doc.text('Actually Covered', 160, y);
-        doc.text('Status', 215, y);
-        doc.text('Hours', 238, y);
-        doc.text('Remarks', 253, y);
-
-        doc.setLineWidth(0.1);
-        doc.line(14, y + 2, 283, y + 2);
-
-        y += 7;
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.5);
-
-        filteredLogs.forEach((l: any, idx: number) => {
-            if (y > 185) {
-                doc.addPage();
-                y = 20;
-            }
-
-            const slot = slotForLog(l.slotId) as any;
-
-            doc.text(String(idx + 1), 14, y);
-            doc.text(String(l.date || ''), 22, y);
-            doc.text(String(slot?.period ? `P${slot.period}` : 'Extra'), 42, y);
-            doc.text(String(courseName(l.courseId)).slice(0, 22), 58, y);
-            doc.text(String(getPlannedTopicName(l)).slice(0, 28), 105, y);
-            doc.text(String(getActuallyCovered(l)).slice(0, 32), 160, y);
-            doc.text(String(l.status || ''), 215, y);
-            doc.text(String(Number(l.hours || 0).toFixed(2)), 238, y);
-            doc.text(String(l.remarks || '—').slice(0, 18), 253, y);
-
-            y += 6;
-        });
-
-        if (y > 175) {
-            doc.addPage();
-            y = 25;
-        } else {
-            y += 15;
-        }
-
-        doc.setFont('helvetica', 'bold');
-        doc.text('Signature of Teacher', 25, y);
-        doc.text('Signature of HOD', 130, y);
-        doc.text('Signature of Principal', 230, y);
-
-        doc.save(
-            `APNSIR_ProfPlan_Register_${startDate || 'all'}_to_${endDate || 'all'}.pdf`
+        const { exportLogsToPDF } = await import('@/lib/exportUtils');
+        exportLogsToPDF(
+            filteredLogs,
+            `Daily Progress Register (${startDate || 'All'} to ${endDate || 'All'})`
         );
     }
 
@@ -542,7 +353,7 @@ export default function Reports() {
                         </h1>
 
                         <p className="mt-1.5 max-w-2xl text-xs sm:text-sm leading-relaxed text-blue-100/80 font-medium">
-                            Inspection-ready chronological register with direct Excel &amp; PDF compliance exports.
+                            Inspection-ready chronological register with direct Excel, PDF, and high-DPI A4 print sheets.
                         </p>
                     </div>
 
@@ -550,35 +361,13 @@ export default function Reports() {
                         <p className="text-[10px] font-bold uppercase tracking-wider text-blue-200">
                             Filtered Entries
                         </p>
+
                         <p className="mt-0.5 text-2xl sm:text-3xl font-black text-white">
                             {filteredLogs.length}
                         </p>
                     </div>
                 </div>
             </section>
-
-            {/* PRINT-ONLY OFFICIAL HEADER */}
-            <div className="hidden print:block text-center border-b-2 border-slate-900 pb-4 mb-4">
-                <h1 className="text-xl font-black tracking-tight uppercase">
-                    E-Lesson Plan-cum-Progress Register
-                </h1>
-                <p className="text-xs font-bold mt-0.5">
-                    Academic Progress &amp; Workload Compliance Register
-                </p>
-                <div className="flex justify-between text-[11px] font-semibold mt-2 pt-2 border-t border-slate-300">
-                    <span>
-                        Generated:{' '}
-                        {new Date().toLocaleDateString('en-IN', {
-                            day: 'numeric',
-                            month: 'long',
-                            year: 'numeric'
-                        })}
-                    </span>
-                    <span>
-                        Total Contact Hours: {totalHours.toFixed(2)} hrs
-                    </span>
-                </div>
-            </div>
 
             {/* GUIDED ONBOARDING BANNER */}
             <div className="print:hidden">
@@ -589,15 +378,15 @@ export default function Reports() {
                     steps={[
                         {
                             step: '1. Filter Records',
-                            desc: 'Click "Advanced Filters & Sorting" to isolate specific date ranges, subjects, semesters, or status types.'
+                            desc: 'Click "Advanced Filter & Sorting" to isolate specific date ranges, subjects, semesters, or status types.'
                         },
                         {
                             step: '2. Manage & Correct',
-                            desc: 'Click "Manage / Correct" to unlock edit and delete actions on any past entry.'
+                            desc: 'Click "Manage Logs" to unlock edit and delete actions on any past entry.'
                         },
                         {
-                            step: '3. Export Official Register',
-                            desc: 'Download audit-ready spreadsheets via Excel (.xlsx) or print formatted signature registers in PDF.'
+                            step: '3. A4 Physical Register',
+                            desc: 'Click "A4 Print View" to open the high-DPI inspection sheet complete with HOD & Principal sign-off blocks.'
                         }
                     ]}
                 />
@@ -644,13 +433,24 @@ export default function Reports() {
 
             {/* ACTION CONTROLS */}
             <section className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm space-y-4 sm:space-y-5 print:hidden">
-                <div>
-                    <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900">
-                        Teaching Progress Register
-                    </h2>
-                    <p className="text-xs font-semibold text-slate-500 mt-0.5">
-                        Arranged chronologically for school/university and departmental audits.
-                    </p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900">
+                            Teaching Progress Register
+                        </h2>
+                        <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                            Inspection-ready records arranged chronologically for academic compliance.
+                        </p>
+                    </div>
+
+                    <Link
+                        href="/reports/print"
+                        target="_blank"
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition transform active:scale-95 shrink-0"
+                    >
+                        <Printer className="w-4 h-4 text-amber-400" />
+                        A4 Print View (Sign-off Sheet)
+                    </Link>
                 </div>
 
                 <div className="flex flex-col gap-3 pt-2 border-t border-slate-100">
@@ -658,10 +458,11 @@ export default function Reports() {
                     <button
                         type="button"
                         onClick={() => setShowFilters(!showFilters)}
-                        className={`w-full inline-flex items-center justify-between px-4 sm:px-5 py-3 rounded-2xl text-xs font-black shadow-sm transition border ${hasActiveFilters
-                            ? 'bg-blue-600 text-white border-blue-700 shadow-blue-200'
-                            : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
-                            }`}
+                        className={`w-full inline-flex items-center justify-between px-4 sm:px-5 py-3 rounded-2xl text-xs font-black shadow-sm transition border ${
+                            hasActiveFilters
+                                ? 'bg-blue-600 text-white border-blue-700 shadow-blue-200'
+                                : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                        }`}
                     >
                         <div className="flex items-center gap-2">
                             <Filter className="w-4 h-4 text-blue-500" />
@@ -675,47 +476,47 @@ export default function Reports() {
                         {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
 
-                    {/* RESPONSIVE BALANCED ACTION GRID */}
+                    {/* BALANCED ACTION GRID */}
                     <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5">
                         <button
                             type="button"
-                            onClick={exportExcel}
-                            className="inline-flex items-center justify-center gap-2 px-3.5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-2xl shadow-sm transition transform active:scale-95 text-center"
+                            onClick={handleExportExcel}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-2xl shadow-sm transition transform active:scale-95 text-center"
                         >
                             <FileSpreadsheet className="w-4 h-4 shrink-0" />
-                            <span className="truncate">Export Excel</span>
+                            <span>Export Excel (.xlsx)</span>
                         </button>
 
                         <button
                             type="button"
-                            onClick={exportPDF}
-                            className="inline-flex items-center justify-center gap-2 px-3.5 py-3 bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs rounded-2xl shadow-sm transition transform active:scale-95 text-center"
+                            onClick={handleExportFullComplianceReport}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-3 bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs rounded-2xl shadow-sm transition transform active:scale-95 text-center"
+                            title="Exports multi-sheet workbook with Overview, Logs, Classes, and Holidays"
+                        >
+                            <Download className="w-4 h-4 shrink-0" />
+                            <span>Full NAAC Workbook</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleExportPDF}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs rounded-2xl shadow-sm transition transform active:scale-95 text-center"
                         >
                             <FileText className="w-4 h-4 shrink-0" />
-                            <span className="truncate">Save PDF</span>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => window.print()}
-                            className="inline-flex items-center justify-center gap-2 px-3.5 py-3 bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs rounded-2xl shadow-sm transition transform active:scale-95 text-center"
-                        >
-                            <Printer className="w-4 h-4 shrink-0" />
-                            <span>Print Register</span>
+                            <span>Save PDF</span>
                         </button>
 
                         <button
                             type="button"
                             onClick={() => setCorrectionMode(!correctionMode)}
-                            className={`inline-flex items-center justify-center gap-2 px-3.5 py-3 text-xs font-bold rounded-2xl text-white shadow-sm transition transform active:scale-95 text-center ${correctionMode
-                                ? 'bg-amber-600 hover:bg-amber-700 ring-2 ring-amber-400'
-                                : 'bg-rose-600 hover:bg-rose-700'
-                                }`}
+                            className={`inline-flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold rounded-2xl text-white shadow-sm transition transform active:scale-95 text-center ${
+                                correctionMode
+                                    ? 'bg-amber-600 hover:bg-amber-700 ring-2 ring-amber-400'
+                                    : 'bg-rose-600 hover:bg-rose-700'
+                            }`}
                         >
                             <Settings2 className="w-4 h-4 shrink-0" />
-                            <span className="truncate">
-                                {correctionMode ? '✓ Done' : 'Manage'}
-                            </span>
+                            <span>{correctionMode ? '✓ Done' : 'Manage Logs'}</span>
                         </button>
                     </div>
                 </div>
@@ -790,14 +591,14 @@ export default function Reports() {
 
                             <div>
                                 <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                                    Semester / Section
+                                    Class / Semester
                                 </label>
                                 <select
                                     value={selectedSemester}
                                     onChange={(e) => setSelectedSemester(e.target.value)}
                                     className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-600"
                                 >
-                                    <option value="ALL">All Semesters</option>
+                                    <option value="ALL">All Classes / Semesters</option>
                                     {semesters.map((sem: string) => (
                                         <option key={sem} value={sem}>
                                             {sem}
@@ -836,7 +637,7 @@ export default function Reports() {
             {/* =====================================================
                 REGISTER DISPLAY: DUAL VIEW
                 - MOBILE (<768px): Structured App Cards
-                - DESKTOP (>=768px) & PRINT: Full Audit Table
+                - DESKTOP (>=768px): Full Audit Table
             ===================================================== */}
 
             {/* 1. MOBILE CARDS VIEW */}
@@ -847,18 +648,18 @@ export default function Reports() {
                     </div>
                 ) : (
                     filteredLogs.map((l: any, index: number) => {
-                        const slot = slotForLog(l.slotId) as any;
+                        const slot: any = slotMap.get(l.slotId);
                         const isTaken = l.status === 'Taken' || l.status === 'Compensated';
 
                         return (
                             <div
                                 key={l.id}
-                                className={`rounded-3xl border p-4 shadow-sm transition space-y-3 ${correctionMode
-                                    ? 'bg-amber-50/40 border-amber-300 ring-1 ring-amber-300/60'
-                                    : 'bg-white border-slate-200'
-                                    }`}
+                                className={`rounded-3xl border p-4 shadow-sm transition space-y-3 ${
+                                    correctionMode
+                                        ? 'bg-amber-50/40 border-amber-300 ring-1 ring-amber-300/60'
+                                        : 'bg-white border-slate-200'
+                                }`}
                             >
-                                {/* Card Header */}
                                 <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                                     <div className="flex items-center gap-2">
                                         <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-100 text-blue-900 font-black text-[10px]">
@@ -871,29 +672,29 @@ export default function Reports() {
                                     </div>
 
                                     <span
-                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${isTaken
-                                            ? 'bg-emerald-100 text-emerald-800'
-                                            : 'bg-slate-100 text-slate-700'
-                                            }`}
+                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                            isTaken
+                                                ? 'bg-emerald-100 text-emerald-800'
+                                                : 'bg-slate-100 text-slate-700'
+                                        }`}
                                     >
                                         {l.status || 'Taken'}
                                     </span>
                                 </div>
 
-                                {/* Subject and Period Info */}
                                 <div>
                                     <div className="flex flex-wrap items-center gap-1.5 text-xs font-extrabold text-blue-950">
-                                        <span>{courseName(l.courseId)}</span>
-                                        {courseCode(l.courseId) && (
+                                        <span>{resolveCourseName(l.courseId)}</span>
+                                        {resolveCourseCode(l.courseId) && (
                                             <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-900 text-[10px] font-bold">
-                                                {courseCode(l.courseId)}
+                                                {resolveCourseCode(l.courseId)}
                                             </span>
                                         )}
                                     </div>
 
                                     <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-500 mt-1">
                                         <span className="flex items-center gap-1">
-                                            <Clock className="w-3 h-3 text-slate-400" />
+                                            <Clock className="w-3.5 h-3.5 text-slate-400" />
                                             {slot?.period ? `Period ${slot.period}` : 'Extra Class'}
                                             {(l.actualStart || slot?.start) && (
                                                 <span className="text-slate-400">
@@ -902,16 +703,15 @@ export default function Reports() {
                                             )}
                                         </span>
 
-                                        {courseSemester(l) && (
+                                        {resolveClassInfo(l) && (
                                             <span className="flex items-center gap-1 text-indigo-700 font-bold">
                                                 <Layers className="w-3 h-3" />
-                                                {courseSemester(l)}
+                                                {resolveClassInfo(l)}
                                             </span>
                                         )}
                                     </div>
                                 </div>
 
-                                {/* Topic Blocks */}
                                 <div className="rounded-2xl bg-slate-50 p-3 text-xs space-y-1.5 border border-slate-100">
                                     <div>
                                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
@@ -938,7 +738,6 @@ export default function Reports() {
                                     )}
                                 </div>
 
-                                {/* Card Footer: Hours & Actions */}
                                 <div className="flex items-center justify-between gap-2 pt-1">
                                     <div className="flex items-center gap-3 text-xs font-bold text-slate-700">
                                         <span>Hours: <strong className="text-slate-950 font-black">{Number(l.hours || 0).toFixed(2)}</strong></span>
@@ -976,40 +775,22 @@ export default function Reports() {
                 )}
             </div>
 
-            {/* 2. DESKTOP & PRINT TABLE VIEW */}
-            <section className="hidden md:block print:block overflow-hidden rounded-2xl border border-blue-900/20 bg-white shadow-md print:border-none print:shadow-none">
+            {/* 2. DESKTOP AUDIT TABLE VIEW */}
+            <section className="hidden md:block overflow-hidden rounded-2xl border border-blue-900/20 bg-white shadow-md">
                 <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1100px] border-collapse text-left text-sm print:min-w-full">
+                    <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
                         <thead>
-                            <tr className="border-b-2 border-blue-900 bg-blue-950 text-blue-50 text-[12px] font-black uppercase tracking-wider print:bg-slate-100 print:text-slate-900">
-                                <th className="py-4 px-4 text-center w-14 border-r border-blue-900/60 print:border-slate-300">
-                                    Sl.
-                                </th>
-                                <th className="py-4 px-4 w-32 border-r border-blue-900/60 print:border-slate-300">
-                                    Date
-                                </th>
-                                <th className="py-4 px-4 w-40 border-r border-blue-900/60 print:border-slate-300">
-                                    Period / Time
-                                </th>
-                                <th className="py-4 px-4 border-r border-blue-900/60 print:border-slate-300">
-                                    Course / Subject
-                                </th>
-                                <th className="py-4 px-4 border-r border-blue-900/60 print:border-slate-300">
-                                    Planned Topic
-                                </th>
-                                <th className="py-4 px-4 border-r border-blue-900/60 print:border-slate-300">
-                                    Actually Covered
-                                </th>
-                                <th className="py-4 px-4 text-center w-28 border-r border-blue-900/60 print:border-slate-300">
-                                    Status
-                                </th>
-                                <th className="py-4 px-4 text-right w-24 border-r border-blue-900/60 print:border-slate-300">
-                                    Hours
-                                </th>
+                            <tr className="border-b-2 border-blue-900 bg-blue-950 text-blue-50 text-[12px] font-black uppercase tracking-wider">
+                                <th className="py-4 px-4 text-center w-14 border-r border-blue-900/60">Sl.</th>
+                                <th className="py-4 px-4 w-32 border-r border-blue-900/60">Date</th>
+                                <th className="py-4 px-4 w-40 border-r border-blue-900/60">Period / Time</th>
+                                <th className="py-4 px-4 border-r border-blue-900/60">Class &amp; Subject</th>
+                                <th className="py-4 px-4 border-r border-blue-900/60">Planned Topic</th>
+                                <th className="py-4 px-4 border-r border-blue-900/60">Actually Covered</th>
+                                <th className="py-4 px-4 text-center w-28 border-r border-blue-900/60">Status</th>
+                                <th className="py-4 px-4 text-right w-24 border-r border-blue-900/60">Hours</th>
                                 {correctionMode && (
-                                    <th className="py-4 px-4 text-center w-36 bg-amber-600 text-white print:hidden">
-                                        Actions
-                                    </th>
+                                    <th className="py-4 px-4 text-center w-36 bg-amber-600 text-white">Actions</th>
                                 )}
                             </tr>
                         </thead>
@@ -1026,52 +807,51 @@ export default function Reports() {
                                 </tr>
                             ) : (
                                 filteredLogs.map((l: any, index: number) => {
-                                    const slot = slotForLog(l.slotId) as any;
+                                    const slot: any = slotMap.get(l.slotId);
 
                                     return (
                                         <tr
                                             key={l.id}
-                                            className={`transition ${correctionMode
-                                                ? 'bg-amber-50/40 hover:bg-amber-100/60 border-l-4 border-amber-500'
-                                                : index % 2 === 0
+                                            className={`transition ${
+                                                correctionMode
+                                                    ? 'bg-amber-50/40 hover:bg-amber-100/60 border-l-4 border-amber-500'
+                                                    : index % 2 === 0
                                                     ? 'bg-white hover:bg-blue-50/40'
                                                     : 'bg-slate-50/70 hover:bg-blue-50/50'
-                                                }`}
+                                            }`}
                                         >
-                                            <td className="py-3.5 px-4 text-center font-bold text-slate-500 border-r border-slate-100 print:border-slate-200">
+                                            <td className="py-3.5 px-4 text-center font-bold text-slate-500 border-r border-slate-100">
                                                 {index + 1}
                                             </td>
 
-                                            <td className="py-3.5 px-4 font-bold text-slate-900 whitespace-nowrap border-r border-slate-100 print:border-slate-200">
+                                            <td className="py-3.5 px-4 font-bold text-slate-900 whitespace-nowrap border-r border-slate-100">
                                                 {l.date}
                                             </td>
 
-                                            <td className="py-3.5 px-4 whitespace-nowrap border-r border-slate-100 print:border-slate-200">
+                                            <td className="py-3.5 px-4 whitespace-nowrap border-r border-slate-100">
                                                 <div className="font-extrabold text-slate-800">
-                                                    {slot?.period
-                                                        ? `Period ${slot.period}`
-                                                        : l.classType || 'Extra Class'}
+                                                    {slot?.period ? `Period ${slot.period}` : l.classType || 'Extra Class'}
                                                 </div>
                                                 <div className="text-[11px] font-medium text-slate-500 mt-0.5">
                                                     {l.actualStart || slot?.start || ''} – {l.actualEnd || slot?.end || ''}
                                                 </div>
                                             </td>
 
-                                            <td className="py-3.5 px-4 border-r border-slate-100 print:border-slate-200">
+                                            <td className="py-3.5 px-4 border-r border-slate-100">
                                                 <div className="font-extrabold text-slate-900 leading-snug">
-                                                    {courseName(l.courseId)}
+                                                    {resolveCourseName(l.courseId)}
                                                 </div>
                                                 <div className="text-xs font-medium text-slate-500 mt-0.5">
-                                                    {courseSemester(l)}{' '}
-                                                    {courseCode(l.courseId) && `• ${courseCode(l.courseId)}`}
+                                                    {resolveClassInfo(l)}
+                                                    {resolveCourseCode(l.courseId) && ` • [${resolveCourseCode(l.courseId)}]`}
                                                 </div>
                                             </td>
 
-                                            <td className="py-3.5 px-4 text-slate-600 border-r border-slate-100 max-w-[180px] print:border-slate-200">
+                                            <td className="py-3.5 px-4 text-slate-600 border-r border-slate-100 max-w-[180px]">
                                                 {getPlannedTopicName(l)}
                                             </td>
 
-                                            <td className="py-3.5 px-4 font-semibold text-slate-900 border-r border-slate-100 max-w-[220px] print:border-slate-200">
+                                            <td className="py-3.5 px-4 font-semibold text-slate-900 border-r border-slate-100 max-w-[220px]">
                                                 <div>{getActuallyCovered(l)}</div>
                                                 {l.remarks && (
                                                     <div className="text-[11px] text-slate-500 italic mt-0.5">
@@ -1080,25 +860,26 @@ export default function Reports() {
                                                 )}
                                             </td>
 
-                                            <td className="py-3.5 px-4 text-center whitespace-nowrap border-r border-slate-100 print:border-slate-200">
+                                            <td className="py-3.5 px-4 text-center whitespace-nowrap border-r border-slate-100">
                                                 <span
-                                                    className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-extrabold ${l.status === 'Taken'
-                                                        ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300'
-                                                        : l.status === 'Compensated'
+                                                    className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-extrabold ${
+                                                        l.status === 'Taken'
+                                                            ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300'
+                                                            : l.status === 'Compensated'
                                                             ? 'bg-blue-100 text-blue-800 ring-1 ring-blue-300'
                                                             : 'bg-slate-200 text-slate-700 ring-1 ring-slate-300'
-                                                        }`}
+                                                    }`}
                                                 >
                                                     {l.status || 'Taken'}
                                                 </span>
                                             </td>
 
-                                            <td className="py-3.5 px-4 text-right font-extrabold text-slate-900 whitespace-nowrap border-r border-slate-100 print:border-slate-200">
+                                            <td className="py-3.5 px-4 text-right font-extrabold text-slate-900 whitespace-nowrap border-r border-slate-100">
                                                 {Number(l.hours || 0).toFixed(2)}
                                             </td>
 
                                             {correctionMode && (
-                                                <td className="py-3.5 px-4 text-center whitespace-nowrap print:hidden">
+                                                <td className="py-3.5 px-4 text-center whitespace-nowrap">
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button
                                                             type="button"
@@ -1109,7 +890,6 @@ export default function Reports() {
                                                             <Edit3 className="w-3.5 h-3.5" />
                                                             Edit
                                                         </button>
-
                                                         <button
                                                             type="button"
                                                             onClick={(e) => deleteLogEntry(l.id, e)}
@@ -1128,19 +908,6 @@ export default function Reports() {
                             )}
                         </tbody>
                     </table>
-                </div>
-
-                {/* OFFICIAL SIGN-OFF FOOTER */}
-                <div className="hidden print:grid grid-cols-3 gap-8 pt-16 pb-6 px-4 text-center text-xs font-bold text-slate-800">
-                    <div className="border-t border-slate-400 pt-2">
-                        Teacher / Educator Signature
-                    </div>
-                    <div className="border-t border-slate-400 pt-2">
-                        Head of Department (HOD)
-                    </div>
-                    <div className="border-t border-slate-400 pt-2">
-                        Principal / Academic Dean
-                    </div>
                 </div>
             </section>
         </div>
