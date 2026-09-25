@@ -57,6 +57,8 @@
     "cross-env": "^7.0.3",
     "electron": "^30.5.1",
     "electron-builder": "^24.13.3",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^16.3.6",
     "png-to-ico": "^3.0.1",
     "postcss": "8.4.49",
     "tailwindcss": "3.4.16",
