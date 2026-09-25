@@ -184,12 +184,28 @@ export default function OnboardingModal({
         const checkProfile = () => {
             try {
                 const savedProfile = loadProfile();
-                if (savedProfile?.onboarded === true) {
-                    setProfile(savedProfile);
+                const existingData = load();
+
+                // Check whether user already has academic classes or slots created
+                const hasExistingAcademicData =
+                    (existingData?.classes && existingData.classes.length > 0) ||
+                    (existingData?.slots && existingData.slots.length > 0);
+
+                // IN ALL OTHER CASES: If already onboarded OR has existing classes/slots,
+                // keep the modal closed and do NOT trigger any redirect.
+                if (savedProfile?.onboarded === true || hasExistingAcademicData) {
+                    if (!savedProfile?.onboarded && hasExistingAcademicData) {
+                        saveProfile({
+                            ...(savedProfile || EMPTY_PROFILE),
+                            onboarded: true,
+                        });
+                    }
+                    setProfile(savedProfile || EMPTY_PROFILE);
                     setIsOpen(false);
                     return;
                 }
 
+                // If genuinely a brand-new user with zero data, open the wizard
                 setProfile(savedProfile || EMPTY_PROFILE);
 
                 try {
@@ -210,7 +226,7 @@ export default function OnboardingModal({
                 console.error('ProfPlan load error:', error);
                 setProfile(EMPTY_PROFILE);
                 setStep(1);
-                setIsOpen(true);
+                setIsOpen(false);
             }
         };
 
@@ -506,6 +522,8 @@ export default function OnboardingModal({
             setProfile(completedProfile);
             setIsOpen(false);
             onComplete?.(completedProfile);
+
+            // ONLY when the wizard completes successfully, force open at weekly timetable:
             router.replace('/timetable?setup=1');
         } catch (err) {
             console.error('ProfPlan finish error:', err);
@@ -992,8 +1010,8 @@ export default function OnboardingModal({
                         {step === 3 && (
                             <button
                                 type="button"
-                                disabled={saving}
                                 onClick={completeSetup}
+                                disabled={saving}
                                 className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-4 text-xs font-black text-white shadow-xl shadow-indigo-200 transition hover:opacity-95 disabled:opacity-50"
                             >
                                 {saving ? (
