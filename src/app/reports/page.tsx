@@ -446,6 +446,7 @@ export default function Reports() {
                     <Link
                         href="/reports/print"
                         target="_blank"
+                        rel="noopener noreferrer"
                         className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition transform active:scale-95 shrink-0"
                     >
                         <Printer className="w-4 h-4 text-amber-400" />
