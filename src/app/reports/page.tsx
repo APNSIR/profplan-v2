@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { load, save, loadProfile, ProfPlanData, UserProfile } from '@/lib/store';
+import { exportProfPlanBackup, restoreProfPlanBackup } from '@/lib/backup';
+import { requestGoogleAccessToken, syncToGoogleDrive, restoreFromGoogleDrive } from '@/lib/gdrive';
 import PageGuide from '@/components/PageGuide';
 import {
     FileSpreadsheet,
@@ -21,12 +23,23 @@ import {
     Clock,
     Layers,
     UserCheck,
-    Download
+    Download,
+    UploadCloud,
+    DatabaseBackup,
+    Cloud,
+    RefreshCw
 } from 'lucide-react';
 
 export default function Reports() {
     const router = useRouter();
     const [mounted, setMounted] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    // Syncing states
+    const [isRestoringFile, setIsRestoringFile] = useState(false);
+    const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+    const [isCloudRestoring, setIsCloudRestoring] = useState(false);
+    const [lastCloudSyncTime, setLastCloudSyncTime] = useState<string | null>(null);
 
     const [d, setD] = useState<ProfPlanData>({
         courses: [],
@@ -269,6 +282,90 @@ export default function Reports() {
     }
 
     /* =====================================================
+        LOCAL JSON BACKUP & RESTORE ACTIONS
+    ===================================================== */
+    async function handleExportJSON() {
+        try {
+            await exportProfPlanBackup();
+        } catch (err: any) {
+            alert(err.message || 'Failed to export backup file.');
+        }
+    }
+
+    async function handleFileRestore(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const confirmed = window.confirm(
+            `Restoring "${file.name}" will merge and sync your local database with this backup.\n\nDo you wish to proceed?`
+        );
+        if (!confirmed) {
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+
+        setIsRestoringFile(true);
+        try {
+            const res = await restoreProfPlanBackup(file);
+            alert(res.message);
+            if (res.success) {
+                const refreshed = load();
+                if (refreshed) setD(refreshed);
+                const refreshedProfile = loadProfile();
+                if (refreshedProfile) setProfile(refreshedProfile);
+            }
+        } catch (err: any) {
+            alert(`Restore failed: ${err.message || 'Unknown error'}`);
+        } finally {
+            setIsRestoringFile(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    }
+
+    /* =====================================================
+        GOOGLE DRIVE APPDATA SYNC & RESTORE (₹0 Cost Model)
+    ===================================================== */
+    async function handleGoogleDriveSync() {
+        setIsCloudSyncing(true);
+        try {
+            const token = await requestGoogleAccessToken();
+            const result = await syncToGoogleDrive(token);
+            if (result.success) {
+                setLastCloudSyncTime(result.time);
+                alert(`✓ Backed up to your Google Drive AppData folder at ${result.time}. Zero server storage consumed.`);
+            }
+        } catch (err: any) {
+            alert(`Google Drive sync error: ${err.message || 'Authentication or network issue'}`);
+        } finally {
+            setIsCloudSyncing(false);
+        }
+    }
+
+    async function handleGoogleDriveRestore() {
+        const confirmed = window.confirm(
+            'This will download your latest register snapshot from your private Google Drive and sync it locally.\n\nContinue?'
+        );
+        if (!confirmed) return;
+
+        setIsCloudRestoring(true);
+        try {
+            const token = await requestGoogleAccessToken();
+            const res = await restoreFromGoogleDrive(token);
+            alert(res.message);
+            if (res.success) {
+                const refreshed = load();
+                if (refreshed) setD(refreshed);
+                const refreshedProfile = loadProfile();
+                if (refreshedProfile) setProfile(refreshedProfile);
+            }
+        } catch (err: any) {
+            alert(`Google Drive restore error: ${err.message || 'Download failed'}`);
+        } finally {
+            setIsCloudRestoring(false);
+        }
+    }
+
+    /* =====================================================
         DYNAMIC LAZY-LOADED EXPORTERS (Bundle Optimization)
     ===================================================== */
     async function handleExportExcel() {
@@ -317,6 +414,15 @@ export default function Reports() {
 
     return (
         <div className="space-y-6 pb-16 max-w-7xl mx-auto px-4 sm:px-6">
+
+            {/* HIDDEN FILE INPUT FOR LOCAL JSON RESTORE */}
+            <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileRestore}
+                accept=".json,application/json"
+                className="hidden"
+            />
 
             {/* NAVIGATIONAL BACK BUTTON */}
             <div className="flex items-center justify-between print:hidden">
@@ -428,6 +534,85 @@ export default function Reports() {
                     <p className="mt-1 text-xl sm:text-2xl font-extrabold text-amber-600 truncate">
                         {latestDate}
                     </p>
+                </div>
+            </section>
+
+            {/* ZERO-COST DATA BACKUP & CLOUD SYNC SECTION */}
+            <section className="rounded-3xl border border-indigo-900/30 bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-950 p-5 sm:p-6 text-white shadow-lg print:hidden">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                    <div className="flex items-start gap-3.5">
+                        <div className="p-3 bg-blue-500/20 border border-blue-400/30 rounded-2xl shrink-0">
+                            <DatabaseBackup className="w-6 h-6 text-blue-300" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-sm sm:text-base font-extrabold text-white">
+                                    Academic Data &amp; Cloud Backup
+                                </h3>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    ₹0 Cost Model
+                                </span>
+                            </div>
+                            <p className="text-xs text-blue-200/80 font-medium mt-1 leading-relaxed max-w-xl">
+                                Keep your registers safe against mobile damage or browser resets. Save snapshots to your computer or sync directly to your personal Google Drive account.
+                            </p>
+                            {lastCloudSyncTime && (
+                                <p className="text-[11px] font-semibold text-emerald-300 mt-1 flex items-center gap-1.5">
+                                    <Cloud className="w-3.5 h-3.5" />
+                                    Last synced to Google Drive at {lastCloudSyncTime}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* TWO GROUPS OF SYNC BUTTONS */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+                        {/* 1. Google Drive Sync Buttons */}
+                        <button
+                            type="button"
+                            disabled={isCloudSyncing}
+                            onClick={handleGoogleDriveSync}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-md transition transform active:scale-95 disabled:opacity-50"
+                        >
+                            <Cloud className="w-4 h-4 text-emerald-100" />
+                            <span>{isCloudSyncing ? 'Connecting...' : 'Backup to Google Drive'}</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            disabled={isCloudRestoring}
+                            onClick={handleGoogleDriveRestore}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-teal-800/80 hover:bg-teal-700 text-teal-100 font-extrabold text-xs rounded-xl border border-teal-400/30 shadow-md transition transform active:scale-95 disabled:opacity-50"
+                            title="Restore your data from your Google Drive AppData folder"
+                        >
+                            <RefreshCw className={`w-4 h-4 text-teal-300 ${isCloudRestoring ? 'animate-spin' : ''}`} />
+                            <span>{isCloudRestoring ? 'Downloading...' : 'Restore from Drive'}</span>
+                        </button>
+
+                        {/* 2. Local File Fallbacks */}
+                        <div className="h-px sm:h-8 w-full sm:w-px bg-blue-800/50 my-1 sm:my-0" />
+
+                        <button
+                            type="button"
+                            onClick={handleExportJSON}
+                            className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-blue-100 font-extrabold text-xs rounded-xl border border-blue-400/20 shadow-sm transition transform active:scale-95"
+                            title="Export snapshot as a JSON file to your device"
+                        >
+                            <Download className="w-3.5 h-3.5 text-blue-300" />
+                            <span>JSON File</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            disabled={isRestoringFile}
+                            onClick={() => fileInputRef.current?.click()}
+                            className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-blue-100 font-extrabold text-xs rounded-xl border border-blue-400/20 shadow-sm transition transform active:scale-95 disabled:opacity-50"
+                            title="Restore snapshot from a JSON file"
+                        >
+                            <UploadCloud className="w-3.5 h-3.5 text-amber-300" />
+                            <span>{isRestoringFile ? 'Restoring...' : 'Import JSON'}</span>
+                        </button>
+                    </div>
                 </div>
             </section>
 

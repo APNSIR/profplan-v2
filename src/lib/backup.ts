@@ -18,7 +18,6 @@ export async function exportProfPlanBackup(): Promise<void> {
     if (typeof window === 'undefined') return;
 
     try {
-        // Collect latest data from Dexie with localStorage fallback
         const [classes, courses, topics, slots, logs, holidays] = await Promise.all([
             db.classes.toArray(),
             db.courses.toArray(),
@@ -83,7 +82,6 @@ export async function restoreProfPlanBackup(file: File): Promise<{ success: bool
 
                 const parsed = JSON.parse(text);
 
-                // Sanity check: Ensure valid ProfPlan JSON structure
                 if (!parsed || (parsed.appName !== 'ProfPlan' && !parsed.data)) {
                     return resolve({
                         success: false,
@@ -93,7 +91,6 @@ export async function restoreProfPlanBackup(file: File): Promise<{ success: bool
 
                 const payloadData: ProfPlanData = parsed.data || parsed;
 
-                // Validate minimum structural integrity
                 const sanitizedData: ProfPlanData = {
                     classes: Array.isArray(payloadData.classes) ? payloadData.classes : [],
                     courses: Array.isArray(payloadData.courses) ? payloadData.courses : [],
@@ -104,13 +101,34 @@ export async function restoreProfPlanBackup(file: File): Promise<{ success: bool
                     holidays: Array.isArray(payloadData.holidays) ? payloadData.holidays : [],
                 };
 
-                // 1. Write to localStorage and trigger events
+                // 1. Sync IndexedDB (Dexie) transactionally
+                await db.transaction('rw', [db.classes, db.courses, db.topics, db.slots, db.logs, db.holidays], async () => {
+                    await Promise.all([
+                        db.classes.clear(),
+                        db.courses.clear(),
+                        db.topics.clear(),
+                        db.slots.clear(),
+                        db.logs.clear(),
+                        db.holidays.clear(),
+                    ]);
+
+                    if (sanitizedData.classes.length) await db.classes.bulkPut(sanitizedData.classes as any);
+                    if (sanitizedData.courses.length) await db.courses.bulkPut(sanitizedData.courses as any);
+                    if (sanitizedData.topics.length) await db.topics.bulkPut(sanitizedData.topics as any);
+                    if (sanitizedData.slots.length) await db.slots.bulkPut(sanitizedData.slots as any);
+                    if (sanitizedData.logs.length) await db.logs.bulkPut(sanitizedData.logs as any);
+                    if (sanitizedData.holidays.length) await db.holidays.bulkPut(sanitizedData.holidays as any);
+                });
+
+                // 2. Sync localStorage fallback
                 save(sanitizedData);
 
-                // 2. Restore profile if included
+                // 3. Restore profile if present
                 if (parsed.profile) {
                     saveProfile(parsed.profile);
                 }
+
+                window.dispatchEvent(new Event('profplan-change'));
 
                 resolve({
                     success: true,

@@ -1,285 +1,289 @@
 // src/lib/gdrive.ts
 
-import { load, save, loadProfile, saveProfile, ProfPlanData } from './store';
 import { db } from './db';
+import { load, loadProfile, save, saveProfile, ProfPlanData } from './store';
+import { ProfPlanBackupPayload } from './backup';
+
+const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+const SYNC_FILE_NAME = 'profplan_cloud_sync.json';
+const TOKEN_STORAGE_KEY = 'profplan_gdrive_token';
 
 declare global {
-  interface Window {
-    google?: any;
-  }
+    interface Window {
+        google?: any;
+    }
 }
 
-// You can configure your Google Cloud OAuth Client ID in your .env as NEXT_PUBLIC_GOOGLE_CLIENT_ID
-const GOOGLE_CLIENT_ID =
-  process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-  'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
-
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
-const SYNC_FILE_NAME = 'profplan_academic_sync.json';
-
-const TOKEN_KEY = 'profplan_gdrive_access_token';
-const TOKEN_EXPIRY_KEY = 'profplan_gdrive_token_expiry';
-
 /**
- * Retrieves a valid, unexpired OAuth access token from localStorage.
+ * Retrieves the cached access token from sessionStorage if present.
  */
 export function getStoredToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  const token = localStorage.getItem(TOKEN_KEY);
-  const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
-
-  if (!token || !expiry) return null;
-  if (Date.now() > Number(expiry)) {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(TOKEN_EXPIRY_KEY);
-    return null;
-  }
-
-  return token;
+    if (typeof window === 'undefined') return null;
+    return sessionStorage.getItem(TOKEN_STORAGE_KEY);
 }
 
 /**
- * Prompts user via Google Identity Services (GIS) token client to obtain an access token.
+ * Stores the access token in sessionStorage.
+ */
+export function storeToken(token: string): void {
+    if (typeof window === 'undefined') return;
+    sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+}
+
+/**
+ * Clears the stored access token.
+ */
+export function clearStoredToken(): void {
+    if (typeof window === 'undefined') return;
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
+/**
+ * Loads the Google Identity Services (GIS) client script dynamically into the DOM.
+ */
+export function loadGoogleIdentityScript(): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (typeof window === 'undefined') return resolve();
+        if (window.google?.accounts?.oauth2) return resolve();
+
+        const existingScript = document.getElementById('google-gis-script');
+        if (existingScript) return resolve();
+
+        const script = document.createElement('script');
+        script.id = 'google-gis-script';
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Google Identity Services.'));
+        document.body.appendChild(script);
+    });
+}
+
+/**
+ * Requests an OAuth2 access token for Google Drive AppData scope using standard popup consent.
  */
 export async function requestGoogleAccessToken(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined' || !window.google?.accounts?.oauth2) {
-      return reject(
-        new Error(
-          'Google Identity Services script not yet loaded. Please verify your internet connection or layout script.'
-        )
-      );
-    }
+    await loadGoogleIdentityScript();
 
-    const tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: SCOPES,
-      callback: (response: any) => {
-        if (response.error) {
-          return reject(new Error(response.error_description || response.error));
+    return new Promise((resolve, reject) => {
+        if (!CLIENT_ID) {
+            return reject(
+                new Error(
+                    'Google Client ID is not configured. Please set NEXT_PUBLIC_GOOGLE_CLIENT_ID in your .env.local file.'
+                )
+            );
         }
 
-        const expiresInMs = (Number(response.expires_in) || 3599) * 1000;
-        const expiryTime = Date.now() + expiresInMs;
-
-        localStorage.setItem(TOKEN_KEY, response.access_token);
-        localStorage.setItem(TOKEN_EXPIRY_KEY, String(expiryTime));
-
-        resolve(response.access_token);
-      },
+        try {
+            const tokenClient = window.google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: (tokenResponse: any) => {
+                    if (tokenResponse.error) {
+                        return reject(new Error(tokenResponse.error_description || tokenResponse.error));
+                    }
+                    storeToken(tokenResponse.access_token);
+                    resolve(tokenResponse.access_token);
+                },
+            });
+            tokenClient.requestAccessToken({ prompt: 'consent' });
+        } catch (err: any) {
+            reject(new Error(err?.message || 'Failed to initialize Google authentication client.'));
+        }
     });
-
-    tokenClient.requestAccessToken({ prompt: '' });
-  });
 }
 
 /**
- * Locates the existing sync file in Google Drive AppData folder, if present.
+ * Helper to ensure a valid access token exists before API calls.
  */
-async function findExistingSyncFileId(accessToken: string): Promise<string | null> {
-  const query = encodeURIComponent(
-    `name = '${SYNC_FILE_NAME}' and 'appDataFolder' in parents and trashed = false`
-  );
-
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${query}&fields=files(id,name)`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Failed to query Drive AppData: ${errorText}`);
-  }
-
-  const result = await res.json();
-  if (result.files && result.files.length > 0) {
-    return result.files[0].id;
-  }
-
-  return null;
+async function resolveAccessToken(token?: string): Promise<string> {
+    if (token) return token;
+    const stored = getStoredToken();
+    if (stored) return stored;
+    return await requestGoogleAccessToken();
 }
 
 /**
- * Syncs the current local and IndexedDB academic records into Google Drive AppData.
+ * Locates the sync file id inside the hidden AppData folder if it already exists.
  */
-export async function syncToGoogleDrive(): Promise<{ success: boolean; message: string }> {
-  try {
-    let token = getStoredToken();
-    if (!token) {
-      token = await requestGoogleAccessToken();
+async function findSyncFileId(accessToken: string): Promise<string | null> {
+    const q = encodeURIComponent(`name = '${SYNC_FILE_NAME}' and 'appDataFolder' in parents and trashed = false`);
+    const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime)`,
+        {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        }
+    );
+
+    if (!res.ok) {
+        throw new Error(`Google Drive query error: ${res.statusText}`);
     }
 
-    // Collect latest snapshot from IndexedDB with fallback to localStorage
+    const data = await res.json();
+    return data.files && data.files.length > 0 ? data.files[0].id : null;
+}
+
+/**
+ * Backs up all Dexie IndexedDB tables, local state, and teacher profile to Google Drive AppData.
+ * Returns success status, formatted time, and status message for CloudSyncWidget.
+ */
+export async function syncToGoogleDrive(
+    accessToken?: string
+): Promise<{ success: boolean; time: string; message: string }> {
+    const token = await resolveAccessToken(accessToken);
+
     const [classes, courses, topics, slots, logs, holidays] = await Promise.all([
-      db.classes.toArray(),
-      db.courses.toArray(),
-      db.topics.toArray(),
-      db.slots.toArray(),
-      db.logs.toArray(),
-      db.holidays.toArray(),
+        db.classes.toArray(),
+        db.courses.toArray(),
+        db.topics.toArray(),
+        db.slots.toArray(),
+        db.logs.toArray(),
+        db.holidays.toArray(),
     ]);
 
     const currentLocal = load();
     const profile = loadProfile();
 
     const fullData: ProfPlanData = {
-      classes: classes.length > 0 ? (classes as any) : currentLocal.classes || [],
-      courses: courses.length > 0 ? (courses as any) : currentLocal.courses || [],
-      units: currentLocal.units || [],
-      topics: topics.length > 0 ? (topics as any) : currentLocal.topics || [],
-      slots: slots.length > 0 ? (slots as any) : currentLocal.slots || [],
-      logs: logs.length > 0 ? (logs as any) : currentLocal.logs || [],
-      holidays: holidays.length > 0 ? (holidays as any) : currentLocal.holidays || [],
+        classes: classes.length > 0 ? (classes as any) : currentLocal.classes,
+        courses: courses.length > 0 ? (courses as any) : currentLocal.courses,
+        units: currentLocal.units || [],
+        topics: topics.length > 0 ? (topics as any) : currentLocal.topics,
+        slots: slots.length > 0 ? (slots as any) : currentLocal.slots,
+        logs: logs.length > 0 ? (logs as any) : currentLocal.logs,
+        holidays: holidays.length > 0 ? (holidays as any) : currentLocal.holidays,
     };
 
-    const payload = {
-      version: 2,
-      appName: 'ProfPlan',
-      exportedAt: new Date().toISOString(),
-      profile: profile || null,
-      data: fullData,
+    const payload: ProfPlanBackupPayload = {
+        version: 2,
+        appName: 'ProfPlan',
+        exportedAt: new Date().toISOString(),
+        profile: profile || null,
+        data: fullData,
     };
 
-    const fileContent = JSON.stringify(payload, null, 2);
-    const existingFileId = await findExistingSyncFileId(token);
+    const existingFileId = await findSyncFileId(token);
+    const boundary = '-------314159265358979323846';
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelimiter = `\r\n--${boundary}--`;
 
-    if (existingFileId) {
-      // Update existing sync file
-      const updateRes = await fetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=media`,
-        {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: fileContent,
-        }
-      );
-
-      if (!updateRes.ok) {
-        throw new Error('Failed to update Google Drive sync file.');
-      }
-    } else {
-      // Create new multipart file in appDataFolder
-      const metadata = {
+    const metadata = {
         name: SYNC_FILE_NAME,
-        parents: ['appDataFolder'],
-      };
+        mimeType: 'application/json',
+        ...(existingFileId ? {} : { parents: ['appDataFolder'] }),
+    };
 
-      const boundary = '-------314159265358979323846';
-      const delimiter = `\r\n--${boundary}\r\n`;
-      const closeDelim = `\r\n--${boundary}--`;
-
-      const multipartRequestBody =
+    const multipartRequestBody =
         delimiter +
         'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
         JSON.stringify(metadata) +
         delimiter +
         'Content-Type: application/json\r\n\r\n' +
-        fileContent +
-        closeDelim;
+        JSON.stringify(payload) +
+        closeDelimiter;
 
-      const createRes = await fetch(
-        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-        {
-          method: 'POST',
-          headers: {
+    const endpoint = existingFileId
+        ? `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart`
+        : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+
+    const method = existingFileId ? 'PATCH' : 'POST';
+
+    const res = await fetch(endpoint, {
+        method,
+        headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': `multipart/related; boundary=${boundary}`,
-          },
-          body: multipartRequestBody,
-        }
-      );
+        },
+        body: multipartRequestBody,
+    });
 
-      if (!createRes.ok) {
-        throw new Error('Failed to create new sync file in Google Drive.');
-      }
+    if (!res.ok) {
+        throw new Error(`Google Drive sync upload failed: ${res.statusText}`);
     }
 
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     return {
-      success: true,
-      message: `Backed up to Google Drive (${fullData.logs.length} progress logs, ${fullData.classes.length} classes).`,
+        success: true,
+        time: timeStr,
+        message: `Successfully synced ${fullData.logs.length} teaching logs to Google Drive at ${timeStr}.`,
     };
-  } catch (err: any) {
-    console.error('Google Drive Sync error:', err);
-    return {
-      success: false,
-      message: err.message || 'Google Drive sync failed.',
-    };
-  }
 }
 
 /**
- * Restores academic records and educator profile from Google Drive AppData.
+ * Downloads the backup snapshot from Google Drive AppData and restores it into IndexedDB and localStorage.
  */
-export async function restoreFromGoogleDrive(): Promise<{ success: boolean; message: string }> {
-  try {
-    let token = getStoredToken();
-    if (!token) {
-      token = await requestGoogleAccessToken();
-    }
+export async function restoreFromGoogleDrive(accessToken?: string): Promise<{ success: boolean; message: string }> {
+    const token = await resolveAccessToken(accessToken);
 
-    const fileId = await findExistingSyncFileId(token);
+    const fileId = await findSyncFileId(token);
     if (!fileId) {
-      return {
-        success: false,
-        message: 'No backup found in your Google Drive AppData folder.',
-      };
+        return {
+            success: false,
+            message: 'No existing backup snapshot was found in your Google Drive AppData folder.',
+        };
     }
 
-    const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
 
     if (!res.ok) {
-      throw new Error('Failed to download backup file from Google Drive.');
+        throw new Error(`Failed to download backup file: ${res.statusText}`);
     }
 
     const parsed = await res.json();
     if (!parsed || (parsed.appName !== 'ProfPlan' && !parsed.data)) {
-      return {
-        success: false,
-        message: 'Invalid backup file structure in Google Drive.',
-      };
+        return { success: false, message: 'Invalid file signature: Missing ProfPlan structure.' };
     }
 
     const payloadData: ProfPlanData = parsed.data || parsed;
 
     const sanitizedData: ProfPlanData = {
-      classes: Array.isArray(payloadData.classes) ? payloadData.classes : [],
-      courses: Array.isArray(payloadData.courses) ? payloadData.courses : [],
-      units: Array.isArray(payloadData.units) ? payloadData.units : [],
-      topics: Array.isArray(payloadData.topics) ? payloadData.topics : [],
-      slots: Array.isArray(payloadData.slots) ? payloadData.slots : [],
-      logs: Array.isArray(payloadData.logs) ? payloadData.logs : [],
-      holidays: Array.isArray(payloadData.holidays) ? payloadData.holidays : [],
+        classes: Array.isArray(payloadData.classes) ? payloadData.classes : [],
+        courses: Array.isArray(payloadData.courses) ? payloadData.courses : [],
+        units: Array.isArray(payloadData.units) ? payloadData.units : [],
+        topics: Array.isArray(payloadData.topics) ? payloadData.topics : [],
+        slots: Array.isArray(payloadData.slots) ? payloadData.slots : [],
+        logs: Array.isArray(payloadData.logs) ? payloadData.logs : [],
+        holidays: Array.isArray(payloadData.holidays) ? payloadData.holidays : [],
     };
 
-    // Save to local persistence layers
+    // 1. Transactionally restore IndexedDB (Dexie)
+    await db.transaction('rw', [db.classes, db.courses, db.topics, db.slots, db.logs, db.holidays], async () => {
+        await Promise.all([
+            db.classes.clear(),
+            db.courses.clear(),
+            db.topics.clear(),
+            db.slots.clear(),
+            db.logs.clear(),
+            db.holidays.clear(),
+        ]);
+
+        if (sanitizedData.classes.length) await db.classes.bulkPut(sanitizedData.classes as any);
+        if (sanitizedData.courses.length) await db.courses.bulkPut(sanitizedData.courses as any);
+        if (sanitizedData.topics.length) await db.topics.bulkPut(sanitizedData.topics as any);
+        if (sanitizedData.slots.length) await db.slots.bulkPut(sanitizedData.slots as any);
+        if (sanitizedData.logs.length) await db.logs.bulkPut(sanitizedData.logs as any);
+        if (sanitizedData.holidays.length) await db.holidays.bulkPut(sanitizedData.holidays as any);
+    });
+
+    // 2. Sync to localStorage fallback
     save(sanitizedData);
+
+    // 3. Restore educator profile
     if (parsed.profile) {
-      saveProfile(parsed.profile);
+        saveProfile(parsed.profile);
+    }
+
+    // 4. Notify all components
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('profplan-change'));
     }
 
     return {
-      success: true,
-      message: `Restored ${sanitizedData.logs.length} teaching logs and ${sanitizedData.classes.length} classes from Google Drive.`,
+        success: true,
+        message: `Cloud backup restored successfully with ${sanitizedData.logs.length} teaching logs.`,
     };
-  } catch (err: any) {
-    console.error('Google Drive Restore error:', err);
-    return {
-      success: false,
-      message: err.message || 'Failed to restore records from Google Drive.',
-    };
-  }
 }

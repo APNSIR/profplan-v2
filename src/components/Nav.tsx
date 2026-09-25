@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import DataHubModal from '@/components/DataHubModal';
 import {
   CalendarDays,
   Clock,
@@ -15,11 +16,14 @@ import {
   Layers3,
   ChevronRight,
   Sparkles,
+  Cloud,
+  ShieldCheck,
 } from 'lucide-react';
 
 export default function Nav() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const [isDataHubOpen, setIsDataHubOpen] = useState(false);
 
   const navItems = [
     { name: 'Today Dashboard', href: '/today', icon: CalendarDays, desc: 'Daily attendance & class progress' },
@@ -49,18 +53,32 @@ export default function Nav() {
 
   return (
     <>
-      {/* 1. THE 3-BAR (HAMBURGER) TRIGGER BUTTON */}
-      <button
-        type="button"
-        onClick={() => setIsOpen(true)}
-        aria-label="Open Navigation Menu"
-        className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:border-indigo-500 hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-      >
-        <Menu className="h-4 w-4 text-indigo-400 group-hover:text-white" />
-        <span className="hidden sm:inline">Menu</span>
-      </button>
+      <div className="flex items-center gap-2">
+        {/* 1. GLOBAL CLOUD SYNC & BACKUP BUTTON */}
+        <button
+          type="button"
+          onClick={() => setIsDataHubOpen(true)}
+          aria-label="Cloud Sync & Backup Hub"
+          title="Cloud Sync & Academic Data Backup"
+          className="flex items-center gap-1.5 rounded-xl border border-blue-500/40 bg-blue-950/60 hover:bg-blue-900/80 px-3 py-2 text-xs font-bold text-blue-200 shadow-sm transition hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400 active:scale-95"
+        >
+          <Cloud className="h-4 w-4 text-blue-400 animate-pulse" />
+          <span className="hidden sm:inline">Cloud Sync</span>
+        </button>
 
-      {/* 2. BACKDROP OVERLAY */}
+        {/* 2. THE 3-BAR (HAMBURGER) TRIGGER BUTTON */}
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          aria-label="Open Navigation Menu"
+          className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:border-indigo-500 hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        >
+          <Menu className="h-4 w-4 text-indigo-400 group-hover:text-white" />
+          <span className="hidden sm:inline">Menu</span>
+        </button>
+      </div>
+
+      {/* 3. BACKDROP OVERLAY */}
       {isOpen && (
         <div
           className="fixed inset-0 z-[90] bg-slate-950/75 backdrop-blur-sm transition-opacity duration-300 animate-fade-in"
@@ -69,7 +87,7 @@ export default function Nav() {
         />
       )}
 
-      {/* 3. SLIDING DRAWER PANEL */}
+      {/* 4. SLIDING DRAWER PANEL */}
       <aside
         className={`fixed top-0 right-0 z-[100] flex h-full w-80 max-w-[85vw] flex-col justify-between border-l border-slate-800 bg-slate-950 text-white shadow-2xl transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
@@ -98,6 +116,29 @@ export default function Nav() {
               aria-label="Close menu"
             >
               <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* QUICK CLOUD SYNC CALLOUT INSIDE DRAWER */}
+          <div className="p-4 pb-0">
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(false);
+                setIsDataHubOpen(true);
+              }}
+              className="w-full flex items-center justify-between gap-3 p-3 rounded-2xl border border-blue-500/40 bg-gradient-to-r from-blue-900/40 to-indigo-900/40 text-blue-100 hover:border-blue-400 hover:bg-blue-900/60 transition shadow-sm text-left group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold leading-tight text-white">Cloud Sync &amp; Backup</p>
+                  <p className="text-[10px] text-blue-300">Google Drive &amp; Local JSON</p>
+                </div>
+              </div>
+              <Cloud className="h-4 w-4 text-blue-400 group-hover:scale-110 transition" />
             </button>
           </div>
 
@@ -160,6 +201,12 @@ export default function Nav() {
           <p className="mt-0.5 text-[10px] text-slate-500">OdishaTeachers.com &bull; Academic Portal</p>
         </div>
       </aside>
+
+      {/* 5. GLOBAL DATA HUB MODAL */}
+      <DataHubModal
+        isOpen={isDataHubOpen}
+        onClose={() => setIsDataHubOpen(false)}
+      />
     </>
   );
 }

@@ -99,6 +99,35 @@ export default function ReportsPrintPage() {
 
     return (
         <div className="min-h-screen bg-slate-100 p-2 sm:p-6 print:bg-white print:p-0 text-slate-900">
+            {/* INJECTED PRINT-SPECIFIC CSS RULES FOR PHYSICAL A4 LANDSCAPE */}
+            <style jsx global>{`
+                @media print {
+                    @page {
+                        size: A4 landscape;
+                        margin: 8mm 10mm 10mm 10mm;
+                    }
+                    body {
+                        background: #ffffff !important;
+                        color: #000000 !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
+                    table {
+                        page-break-inside: auto;
+                    }
+                    tr {
+                        page-break-inside: avoid;
+                        page-break-after: auto;
+                    }
+                    thead {
+                        display: table-header-group !important;
+                    }
+                    tfoot {
+                        display: table-footer-group !important;
+                    }
+                }
+            `}</style>
+
             {/* SCREEN NAVIGATION BAR */}
             <div className="max-w-[297mm] mx-auto mb-4 flex items-center justify-between bg-white px-5 py-3 rounded-2xl border border-slate-300 shadow-sm print:hidden">
                 <Link
@@ -116,7 +145,7 @@ export default function ReportsPrintPage() {
                     <button
                         type="button"
                         onClick={() => window.print()}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl shadow transition"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl shadow transition transform active:scale-95"
                     >
                         <Printer className="w-4 h-4" />
                         Print / Save as PDF
@@ -125,7 +154,7 @@ export default function ReportsPrintPage() {
             </div>
 
             {/* A4 PRINT CONTAINER */}
-            <div className="max-w-[297mm] mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-slate-200 print:shadow-none print:border-none print:p-2 print:m-0">
+            <div className="max-w-[297mm] mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-slate-200 print:shadow-none print:border-none print:p-0 print:m-0">
                 {/* INSTITUTIONAL HEADER */}
                 <header className="border-b-2 border-slate-900 pb-3 mb-3 text-center">
                     <div className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">
@@ -160,7 +189,7 @@ export default function ReportsPrintPage() {
 
                 {/* AUDIT REGISTER TABLE */}
                 <table className="w-full border-collapse text-left text-[11px] border border-slate-900">
-                    <thead>
+                    <thead className="print:[display:table-header-group]">
                         <tr className="bg-slate-100 border-b border-slate-900 text-slate-950 font-bold uppercase text-[10px]">
                             <th className="py-1.5 px-2 border-r border-slate-900 text-center w-8">Sl.</th>
                             <th className="py-1.5 px-2 border-r border-slate-900 w-20">Date</th>
