@@ -29,7 +29,8 @@ import {
     Sparkles,
     BookMarked,
     ListFilter,
-    CheckCircle2
+    CheckCircle2,
+    FolderKanban
 } from 'lucide-react';
 
 import {
@@ -105,6 +106,9 @@ function SyllabusContent() {
     const [mounted, setMounted] = useState(false);
     const [data, setData] = useState<ProfPlanData>(emptyData());
     const [activeClassId, setActiveClassId] = useState<string | null>(null);
+
+    // Toggleable workspace selector deck state
+    const [isWorkspaceDeckOpen, setIsWorkspaceDeckOpen] = useState(false);
 
     const [expandedCourses, setExpandedCourses] = useState<Record<string, boolean>>({});
     const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>({});
@@ -192,9 +196,9 @@ function SyllabusContent() {
             activeClassIndex % CARD_PALETTES.length
             ]
             : {
-                bg: 'bg-[#131b40]',
+                bg: 'bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950',
                 text: 'text-white',
-                badge: 'bg-white/15 text-blue-200'
+                badge: 'bg-white/20 text-white'
             };
 
     const activeClass = useMemo<ClassItem | undefined>(() => {
@@ -222,7 +226,7 @@ function SyllabusContent() {
             .filter((unit: any) => {
                 if (unit.courseId !== courseId) return false;
                 const titleStr = (unit.name || unit.title || '').trim();
-                return titleStr.length > 0; // Filter out empty/ghost units completely
+                return titleStr.length > 0;
             })
             .sort((a: any, b: any) => {
                 const numA = a.unitNumber ?? a.order ?? 0;
@@ -292,7 +296,6 @@ function SyllabusContent() {
             (course) => course.id
         );
 
-        const units = getCourseUnits(courseIds[0] || ''); // filtered safely
         const unitsList = (data.units || []).filter((u: any) => courseIds.includes(u.courseId) && Boolean((u.name || u.title || '').trim()));
         const unitIds = new Set(unitsList.map((u: any) => u.id));
 
@@ -419,6 +422,7 @@ function SyllabusContent() {
         persist(updatedData);
 
         setActiveClassId(newClass.id);
+        setIsWorkspaceDeckOpen(false);
 
         if (keepOpen) {
             setSessionClassesAdded(
@@ -1176,7 +1180,7 @@ function SyllabusContent() {
 
                 <Link
                     href="/today"
-                    className="group inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-white hover:bg-blue-50/70 border-2 border-slate-200 hover:border-blue-400/60 shadow-sm transition"
+                    className="group inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-white hover:bg-blue-50/70 border-2 border-slate-200 hover:border-blue-400/60 shadow-sm transition cursor-pointer"
                 >
                     <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-100 text-blue-800 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                         <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
@@ -1191,23 +1195,22 @@ function SyllabusContent() {
 
                 <Link
                     href="/today"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-blue-950 hover:bg-blue-900 text-white font-extrabold text-xs shadow-md transition"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-blue-950 hover:bg-blue-900 text-white font-extrabold text-xs shadow-md transition cursor-pointer"
                 >
                     <Home className="w-4 h-4" />
                     Go to Today Page
                 </Link>
             </div>
 
-            {/* UNIFIED HERO HEADER */}
+            {/* UNIFIED HERO HEADER WITH APNSIR BRANDING */}
             <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 p-6 md:p-8 text-white shadow-xl">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.35),transparent_50%)]" />
 
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-
                     <div>
-
                         <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3.5 py-1 text-xs font-bold tracking-wide text-white backdrop-blur-sm">
                             <Sparkles className="w-3.5 h-3.5 text-white" />
-                            Curriculum Foundation
+                            Curriculum Foundation • An Initiative by APNSIR FOUNDATION
                         </div>
 
                         <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white mt-1">
@@ -1220,21 +1223,18 @@ function SyllabusContent() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">
-
                         <button
                             type="button"
                             onClick={openCloneModal}
                             disabled={
                                 !activeClass ||
-                                data.classes.length <
-                                2
+                                data.classes.length < 2
                             }
-                            className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-5 py-3 text-xs font-bold uppercase tracking-wide text-white shadow-lg transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-5 py-3 text-xs font-bold uppercase tracking-wide text-white shadow-lg transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer backdrop-blur-sm border border-white/20"
                         >
                             <Copy className="h-4 w-4" />
                             Clone Syllabus
                         </button>
-
                     </div>
                 </div>
             </section>
@@ -1242,83 +1242,60 @@ function SyllabusContent() {
             {/* MAIN CONTENT WORKSPACE */}
             <main className="space-y-6">
 
-                {/* SELECT CLASS DROPDOWN BAR */}
+                {/* SELECT CLASS WORKSPACE TOGGLE & DROPDOWN BAR */}
                 <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
-
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-
                         <div className="flex items-center gap-3 w-full sm:w-auto flex-1">
-
-                            <div className="p-2.5 bg-blue-100 text-blue-800 rounded-2xl shrink-0">
+                            <div className="p-2.5 bg-blue-100 text-blue-800 rounded-2xl shrink-0 shadow-xs">
                                 <Layers className="w-5 h-5" />
                             </div>
 
                             <div className="w-full sm:max-w-md">
-
-                                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1">
                                     Class / Semester Workspace *
                                 </label>
 
-                                <select
-                                    value={
-                                        activeClassId ||
-                                        ''
-                                    }
-                                    onChange={(e) =>
-                                        setActiveClassId(
-                                            e.target
-                                                .value
-                                        )
-                                    }
-                                    className="w-full px-4 py-2.5 text-sm font-black rounded-xl border border-slate-300 bg-slate-50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-xs"
-                                >
-                                    <option
-                                        value=""
-                                        disabled
+                                <div className="flex items-center gap-2">
+                                    <select
+                                        value={activeClassId || ''}
+                                        onChange={(e) => {
+                                            setActiveClassId(e.target.value);
+                                            setIsWorkspaceDeckOpen(false);
+                                        }}
+                                        className="w-full px-4 py-2.5 text-sm font-black rounded-xl border border-slate-300 bg-slate-50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-xs cursor-pointer"
                                     >
-                                        -- Select Class / Semester Workspace --
-                                    </option>
+                                        <option value="" disabled className="text-slate-400 bg-white font-bold">
+                                            -- Select Class / Semester Workspace --
+                                        </option>
 
-                                    {data.classes.map(
-                                        (
-                                            cls: any
-                                        ) => (
-                                            <option
-                                                key={
-                                                    cls.id
-                                                }
-                                                value={
-                                                    cls.id
-                                                }
-                                            >
-                                                🎓{' '}
-                                                {
-                                                    cls.name
-                                                }{' '}
-                                                (
-                                                {
-                                                    cls.stream ||
-                                                    'General'
-                                                }
-                                                )
+                                        {data.classes.map((cls: any) => (
+                                            <option key={cls.id} value={cls.id} className="text-slate-900 font-bold bg-white">
+                                                🎓 {cls.name} ({cls.stream || 'General'})
                                             </option>
-                                        )
+                                        ))}
+                                    </select>
+
+                                    {activeClassId && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveClassId(null)}
+                                            className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs rounded-xl transition shadow-xs whitespace-nowrap cursor-pointer"
+                                            title="Close active workspace and return to selector"
+                                        >
+                                            Switch / Close
+                                        </button>
                                     )}
-                                </select>
+                                </div>
                             </div>
                         </div>
 
+                        {/* DISTINCT COLOR-CODED ACTION BUTTON: ADD CLASS */}
                         <div className="flex items-center gap-2 pt-2 sm:pt-0 flex-wrap">
-
                             {activeClass && (
                                 <button
                                     type="button"
-                                    onClick={() =>
-                                        handleDeleteClass(
-                                            activeClass
-                                        )
-                                    }
-                                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold text-xs rounded-xl shadow-sm transition"
+                                    onClick={() => handleDeleteClass(activeClass)}
+                                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold text-xs rounded-xl shadow-sm transition cursor-pointer"
                                     title="Delete Active Workspace"
                                 >
                                     <Trash2 className="w-4 h-4" />
@@ -1328,794 +1305,474 @@ function SyllabusContent() {
 
                             <button
                                 type="button"
-                                onClick={
-                                    openClassModal
-                                }
-                                className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs rounded-xl shadow-sm transition"
+                                onClick={openClassModal}
+                                className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition cursor-pointer"
                             >
                                 <Plus className="w-4 h-4" />
-                                Add New Class/Semester Workspace
+                                Add Class / Semester
                             </button>
-
                         </div>
                     </div>
                 </div>
 
                 {/* GUIDE STATE OR ACTIVE WORKSPACE */}
                 {!activeClass ? (
-
                     <section className="rounded-3xl border border-slate-200 bg-white p-8 md:p-12 shadow-sm space-y-8 animate-in fade-in">
-
                         <div className="flex flex-col md:flex-row items-center gap-6 border-b border-slate-100 pb-8">
-
                             <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-blue-50 text-blue-600 shrink-0">
                                 <BookMarked className="h-8 w-8" />
                             </div>
 
                             <div className="text-center md:text-left">
-
                                 <h2 className="text-xl font-black text-slate-900">
                                     Welcome to the Syllabus Planner
                                 </h2>
-
                                 <p className="text-xs sm:text-sm text-slate-500 mt-1">
                                     Select a class workspace using the dropdown above to begin organising your curriculum, subjects, and lesson registers.
                                 </p>
-
                             </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
                             <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 space-y-2">
-
-                                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white font-black text-xs">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white font-black text-xs shadow-sm">
                                     1
                                 </div>
-
-                                <h4 className="text-sm font-black text-slate-900">
-                                    Create Workspaces
-                                </h4>
-
+                                <h4 className="text-sm font-black text-slate-900">Create Workspaces</h4>
                                 <p className="text-xs text-slate-600 leading-relaxed">
-                                    Register classes, semesters, or academic batches using the <strong className="text-slate-900">Add New Class/Semester Workspace</strong> button.
+                                    Register classes, semesters, or academic batches using the <strong className="text-slate-900">Add Class / Semester</strong> button.
                                 </p>
                             </div>
 
                             <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 space-y-2">
-
-                                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white font-black text-xs">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white font-black text-xs shadow-sm">
                                     2
                                 </div>
-
-                                <h4 className="text-sm font-black text-slate-900">
-                                    Add Subjects & Units
-                                </h4>
-
+                                <h4 className="text-sm font-black text-slate-900">Add Subjects & Units</h4>
                                 <p className="text-xs text-slate-600 leading-relaxed">
                                     Map out paper codes, target lecture hours, modules, and detailed unit structures.
                                 </p>
                             </div>
 
                             <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-5 space-y-2">
-
-                                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white font-black text-xs">
+                                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 text-white font-black text-xs shadow-sm">
                                     3
                                 </div>
-
-                                <h4 className="text-sm font-black text-slate-900">
-                                    Track & Clone
-                                </h4>
-
+                                <h4 className="text-sm font-black text-slate-900">Track & Clone</h4>
                                 <p className="text-xs text-slate-600 leading-relaxed">
                                     Monitor planned vs. actual progress in real-time or clone templates across sections instantly.
                                 </p>
                             </div>
-
                         </div>
                     </section>
-
                 ) : (
-
                     <div className="space-y-6 animate-in fade-in">
 
                         {/* ACTIVE CLASS BANNER */}
-                        <section
-                            className={`rounded-3xl p-6 shadow-xl transition-colors duration-300 ${activePalette.bg}`}
-                        >
+                        <section className={`rounded-3xl p-6 md:p-8 shadow-xl transition-colors duration-300 ${activePalette.bg} text-white relative overflow-hidden`}>
+                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.15),transparent_50%)]" />
 
-                            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-
+                            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                                 <div>
-
                                     <div className="flex items-center gap-2 flex-wrap mb-2">
-
-                                        <div
-                                            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold tracking-wide ${activePalette.badge}`}
-                                        >
-                                            <span className="h-2 w-2 rounded-full bg-amber-300"></span>
+                                        <div className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1 text-[11px] font-extrabold tracking-wide ${activePalette.badge} shadow-xs backdrop-blur-sm`}>
+                                            <span className="h-2 w-2 rounded-full bg-amber-300 animate-pulse"></span>
                                             Active Workspace
                                         </div>
 
                                         <button
                                             type="button"
-                                            onClick={() =>
-                                                setActiveClassId(
-                                                    null
-                                                )
-                                            }
-                                            className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-white hover:bg-slate-100 text-red-600 font-extrabold text-[11px] transition shadow-sm"
+                                            onClick={() => setActiveClassId(null)}
+                                            className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-white font-extrabold text-[11px] transition shadow-xs cursor-pointer backdrop-blur-sm border border-white/20"
                                         >
-                                            <ListFilter className="w-3.5 h-3.5 text-red-600" />
-                                            Click to Select Other Classes
+                                            <ListFilter className="w-3.5 h-3.5 text-amber-300" />
+                                            Switch Class Workspace
                                         </button>
-
                                     </div>
 
-                                    <h2
-                                        className={`mt-2 text-2xl font-black ${activePalette.text}`}
-                                    >
+                                    <h2 className={`mt-1 text-2xl md:text-3xl font-black ${activePalette.text}`}>
                                         {activeClass.name}
                                     </h2>
 
-                                    <p
-                                        className={`mt-1 text-xs ${activePalette.text} opacity-85`}
-                                    >
-                                        {activeClass.stream ||
-                                            'General / Academic'}{' '}
-                                        • Complete syllabus overview & curriculum control
+                                    <p className={`mt-1 text-xs sm:text-sm ${activePalette.text} opacity-90 font-medium`}>
+                                        {activeClass.stream || 'General / Academic'} • Complete syllabus overview & curriculum control
                                     </p>
-
                                 </div>
 
                                 <div className="grid grid-cols-3 gap-3">
-
-                                    <div className="rounded-2xl bg-white/10 px-5 py-3 text-center border border-white/20">
-
-                                        <div
-                                            className={`text-2xl font-black ${activePalette.text}`}
-                                        >
-                                            {
-                                                activeStats
-                                                    .courses
-                                                    .length
-                                            }
+                                    <div className="rounded-2xl bg-white/10 px-4 py-3 text-center border border-white/20 backdrop-blur-sm shadow-inner">
+                                        <div className={`text-2xl font-black ${activePalette.text}`}>
+                                            {activeStats.courses.length}
                                         </div>
-
-                                        <div
-                                            className={`text-[10px] font-bold uppercase tracking-wider ${activePalette.text} opacity-85`}
-                                        >
+                                        <div className={`text-[10px] font-bold uppercase tracking-wider ${activePalette.text} opacity-85`}>
                                             Subjects
                                         </div>
                                     </div>
 
-                                    <div className="rounded-2xl bg-white/10 px-5 py-3 text-center border border-white/20">
-
-                                        <div
-                                            className={`text-2xl font-black ${activePalette.text}`}
-                                        >
-                                            {
-                                                activeStats
-                                                    .units
-                                                    .length
-                                            }
+                                    <div className="rounded-2xl bg-white/10 px-4 py-3 text-center border border-white/20 backdrop-blur-sm shadow-inner">
+                                        <div className={`text-2xl font-black ${activePalette.text}`}>
+                                            {activeStats.units.length}
                                         </div>
-
-                                        <div
-                                            className={`text-[10px] font-bold uppercase tracking-wider ${activePalette.text} opacity-85`}
-                                        >
+                                        <div className={`text-[10px] font-bold uppercase tracking-wider ${activePalette.text} opacity-85`}>
                                             Units
                                         </div>
                                     </div>
 
-                                    <div className="rounded-2xl bg-white/10 px-5 py-3 text-center border border-white/20">
-
-                                        <div
-                                            className={`text-2xl font-black ${activePalette.text}`}
-                                        >
-                                            {
-                                                activeStats
-                                                    .topics
-                                                    .length
-                                            }
+                                    <div className="rounded-2xl bg-white/10 px-4 py-3 text-center border border-white/20 backdrop-blur-sm shadow-inner">
+                                        <div className={`text-2xl font-black ${activePalette.text}`}>
+                                            {activeStats.topics.length}
                                         </div>
-
-                                        <div
-                                            className={`text-[10px] font-bold uppercase tracking-wider ${activePalette.text} opacity-85`}
-                                        >
+                                        <div className={`text-[10px] font-bold uppercase tracking-wider ${activePalette.text} opacity-85`}>
                                             Topics
                                         </div>
                                     </div>
-
                                 </div>
                             </div>
                         </section>
 
                         {/* PROGRESS BAR */}
                         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
                                 <div className="flex items-center gap-3">
-
                                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
                                         <BarChart3 className="h-5 w-5" />
                                     </div>
-
                                     <div>
-
                                         <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
                                             Planned Curriculum
                                         </p>
-
                                         <p className="text-sm font-black text-slate-800">
-                                            {
-                                                activeStats.plannedPeriods
-                                            }{' '}
-                                            of{' '}
-                                            {
-                                                activeStats.targetPeriods
-                                            }{' '}
-                                            periods planned
+                                            {activeStats.plannedPeriods} of {activeStats.targetPeriods} periods planned
                                         </p>
-
                                     </div>
                                 </div>
 
                                 <div className="flex items-center gap-3">
-
-                                    <div className="h-3 w-40 overflow-hidden rounded-full bg-slate-100">
-
+                                    <div className="h-3 w-44 overflow-hidden rounded-full bg-slate-100 shadow-inner">
                                         <div
-                                            className="h-full rounded-full bg-blue-600 transition-all"
-                                            style={{
-                                                width: `${activeStats.progress}%`,
-                                            }}
+                                            className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                                            style={{ width: `${activeStats.progress}%` }}
                                         />
-
                                     </div>
-
                                     <span className="text-sm font-black text-blue-600">
-                                        {
-                                            activeStats.progress
-                                        }
-                                        %
+                                        {activeStats.progress}%
                                     </span>
-
                                 </div>
                             </div>
                         </section>
 
-                        {/* TOOLBAR */}
+                        {/* TOOLBAR WITH DISTINCT COLOR-CODED BUTTONS */}
                         <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
                             <div>
-
                                 <h3 className="text-base font-black uppercase tracking-wider text-slate-800">
                                     Subjects / Papers
                                 </h3>
-
                                 <p className="mt-0.5 text-xs text-slate-500">
-                                    Organise your curriculum from subject down to specific topics.
+                                    Organise your curriculum from subject down to specific units and topics.
                                 </p>
-
                             </div>
 
                             <div className="flex flex-wrap gap-2">
-
+                                {/* DISTINCT COLOR: ADD SUBJECT (Emerald) */}
                                 <button
                                     type="button"
-                                    onClick={
-                                        openCourseModal
-                                    }
-                                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-white shadow-sm transition hover:bg-blue-700"
+                                    onClick={openCourseModal}
+                                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-emerald-700 cursor-pointer"
                                 >
                                     <Plus className="h-4 w-4" />
                                     Add Subject
                                 </button>
 
-                                {activeClassCourses.length >
-                                    0 && (
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                openUnitModal(
-                                                    activeClassCourses[0]
-                                                        .id
-                                                )
-                                            }
-                                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-slate-700 shadow-sm transition hover:bg-slate-50"
-                                        >
-                                            <Layers className="h-4 w-4" />
-                                            Add Unit
-                                        </button>
-                                    )}
-
+                                {/* DISTINCT COLOR: ADD UNIT (Violet) */}
+                                {activeClassCourses.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => openUnitModal(activeClassCourses[0].id)}
+                                        className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-violet-700 cursor-pointer"
+                                    >
+                                        <Layers className="h-4 w-4" />
+                                        Add Unit
+                                    </button>
+                                )}
                             </div>
                         </section>
 
                         {/* SUBJECT LIST */}
-                        {activeClassCourses.length ===
-                            0 ? (
-
+                        {activeClassCourses.length === 0 ? (
                             <section className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
-
-                                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
                                     <BookOpen className="h-7 w-7" />
                                 </div>
-
                                 <h3 className="mt-4 text-base font-black text-slate-900">
                                     No subjects added yet
                                 </h3>
-
                                 <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-slate-500">
                                     Add a subject or paper to begin building the syllabus for this workspace.
                                 </p>
-
                                 <div className="mt-5 flex justify-center">
-
                                     <button
                                         type="button"
-                                        onClick={
-                                            openCourseModal
-                                        }
-                                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold uppercase text-white shadow-sm"
+                                        onClick={openCourseModal}
+                                        className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black uppercase text-white shadow-sm cursor-pointer"
                                     >
                                         <Plus className="h-4 w-4" />
                                         Add Subject
                                     </button>
-
                                 </div>
                             </section>
-
                         ) : (
-
                             <section className="space-y-4">
-
-                                {activeClassCourses.map(
-                                    (
-                                        course,
-                                        courseIndex
-                                    ) => {
-
-                                        const courseUnits =
-                                            getCourseUnits(
-                                                course.id
-                                            );
-
-                                        const courseTopics =
-                                            courseUnits.reduce(
-                                                (
-                                                    total,
-                                                    unit
-                                                ) =>
-                                                    total +
-                                                    getUnitTopics(
-                                                        unit.id
-                                                    ).length,
+                                {activeClassCourses.map((course, courseIndex) => {
+                                    const courseUnits = getCourseUnits(course.id);
+                                    const courseTopics = courseUnits.reduce(
+                                        (total, unit) => total + getUnitTopics(unit.id).length,
+                                        0
+                                    );
+                                    const coursePlanned = courseUnits.reduce(
+                                        (total, unit) =>
+                                            total +
+                                            getUnitTopics(unit.id).reduce(
+                                                (sum, topic: any) => sum + (Number(topic.plannedClasses) || 0),
                                                 0
-                                            );
+                                            ),
+                                        0
+                                    );
 
-                                        const coursePlanned =
-                                            courseUnits.reduce(
-                                                (
-                                                    total,
-                                                    unit
-                                                ) =>
-                                                    total +
-                                                    getUnitTopics(
-                                                        unit.id
-                                                    ).reduce(
-                                                        (
-                                                            sum,
-                                                            topic: any
-                                                        ) =>
-                                                            sum +
-                                                            (Number(
-                                                                topic.plannedClasses
-                                                            ) ||
-                                                                0),
-                                                        0
-                                                    ),
-                                                0
-                                            );
+                                    const expanded = expandedCourses[course.id] ?? true;
+                                    const courseHoursVal = Number((course as any).hours ?? (course as any).targetHours ?? 45);
 
-                                        const expanded =
-                                            expandedCourses[
-                                            course.id
-                                            ] ?? true;
+                                    return (
+                                        <div
+                                            key={course.id}
+                                            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                                        >
+                                            {/* SUBJECT HEADER */}
+                                            <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                                                <div className="flex min-w-0 items-center gap-4">
+                                                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 font-black">
+                                                        {courseIndex + 1}
+                                                    </div>
 
-                                        const courseHoursVal = Number((course as any).hours ?? (course as any).targetHours ?? 45);
+                                                    <div className="min-w-0">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <h4 className="truncate text-base font-black text-slate-900">
+                                                                {course.name}
+                                                            </h4>
+                                                            <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-600">
+                                                                {course.code}
+                                                            </span>
+                                                        </div>
 
-                                        return (
+                                                        <div className="mt-1 flex flex-wrap items-center gap-3 text-xs font-medium text-slate-500">
+                                                            {/* Clickable Units Badge */}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setExpandedCourses(prev => ({ ...prev, [course.id]: true }));
+                                                                }}
+                                                                className="inline-flex items-center gap-1 rounded-md bg-violet-50 hover:bg-violet-100 text-violet-700 px-2 py-0.5 font-bold transition shadow-xs cursor-pointer"
+                                                                title="Click to view/expand units"
+                                                            >
+                                                                <Layers className="w-3 h-3" />
+                                                                {courseUnits.length} units
+                                                            </button>
 
-                                            <div
-                                                key={
-                                                    course.id
-                                                }
-                                                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-                                            >
+                                                            <span>•</span>
 
-                                                {/* SUBJECT HEADER */}
-<div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                                                            {/* Clickable Topics Badge */}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setExpandedCourses(prev => ({ ...prev, [course.id]: true }));
+                                                                    const newExpandedUnits = { ...expandedUnits };
+                                                                    courseUnits.forEach(u => { newExpandedUnits[u.id] = true; });
+                                                                    setExpandedUnits(newExpandedUnits);
+                                                                }}
+                                                                className="inline-flex items-center gap-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-700 px-2 py-0.5 font-bold transition shadow-xs cursor-pointer"
+                                                                title="Click to expand units and view all topics"
+                                                            >
+                                                                <Target className="w-3 h-3" />
+                                                                {courseTopics} topics
+                                                            </button>
 
-                                            <div className="flex min-w-0 items-center gap-4">
+                                                            <span>•</span>
 
-                                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
-
-                                                    <span className="text-sm font-black">
-                                                        {
-                                                            courseIndex +
-                                                            1
-                                                        }
-                                                    </span>
-
+                                                            <span>
+                                                                {coursePlanned} / {courseHoursVal} periods
+                                                            </span>
+                                                        </div>
+                                                    </div>
                                                 </div>
 
-                                                <div className="min-w-0">
+                                                <div className="flex shrink-0 items-center gap-2">
+                                                    {/* DISTINCT COLOR: ADD UNIT (Violet) */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openUnitModal(course.id)}
+                                                        className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-700 px-3.5 py-2 text-xs font-black uppercase tracking-wide text-white transition shadow-xs cursor-pointer"
+                                                    >
+                                                        <Plus className="h-4 w-4" />
+                                                        Add Unit
+                                                    </button>
 
-                                                    <div className="flex flex-wrap items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteCourse(course)}
+                                                        className="rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
+                                                        title="Delete Subject"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
 
-                                                        <h4 className="truncate text-base font-black text-slate-900">
-                                                            {
-                                                                course.name
-                                                            }
-                                                        </h4>
-
-                                                        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-600">
-                                                            {
-                                                                course.code
-                                                            }
-                                                        </span>
-
-                                                    </div>
-
-                                                    <div className="mt-1 flex flex-wrap items-center gap-3 text-xs font-medium text-slate-500">
-
-                                                        {/* Clickable Units Badge */}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setExpandedCourses(prev => ({ ...prev, [course.id]: true }));
-                                                            }}
-                                                            className="inline-flex items-center gap-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-0.5 font-bold transition shadow-xs"
-                                                            title="Click to view/expand units"
-                                                        >
-                                                            <Layers className="w-3 h-3" />
-                                                            {courseUnits.length} units
-                                                        </button>
-
-                                                        <span>•</span>
-
-                                                        {/* Clickable Topics Badge */}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setExpandedCourses(prev => ({ ...prev, [course.id]: true }));
-                                                                // Expand all units for this course
-                                                                const newExpandedUnits = { ...expandedUnits };
-                                                                courseUnits.forEach(u => { newExpandedUnits[u.id] = true; });
-                                                                setExpandedUnits(newExpandedUnits);
-                                                            }}
-                                                            className="inline-flex items-center gap-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-2 py-0.5 font-bold transition shadow-xs"
-                                                            title="Click to expand units and view all topics"
-                                                        >
-                                                            <Target className="w-3 h-3" />
-                                                            {courseTopics} topics
-                                                        </button>
-
-                                                        <span>•</span>
-
-                                                        <span>
-                                                            {
-                                                                coursePlanned
-                                                            }{' '}
-                                                            /{' '}
-                                                            {
-                                                                courseHoursVal
-                                                            }{' '}
-                                                            periods
-                                                        </span>
-
-                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleCourse(course.id)}
+                                                        className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 cursor-pointer"
+                                                        title={expanded ? 'Collapse Subject' : 'Expand Subject'}
+                                                    >
+                                                        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                    </button>
                                                 </div>
                                             </div>
 
-                                            <div className="flex shrink-0 items-center gap-2">
-                                                {/* Action buttons remain unchanged */}
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        openUnitModal(
-                                                            course.id
-                                                        )
-                                                    }
-                                                    className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
-                                                >
-                                                    <Plus className="h-4 w-4" />
-                                                    Add Unit
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        handleDeleteCourse(
-                                                            course
-                                                        )
-                                                    }
-                                                    className="rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
-                                                    title="Delete Subject"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        toggleCourse(
-                                                            course.id
-                                                        )
-                                                    }
-                                                    className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"
-                                                    title={
-                                                        expanded
-                                                            ? 'Collapse Subject'
-                                                            : 'Expand Subject'
-                                                    }
-                                                >
-                                                    {expanded ? (
-                                                        <ChevronDown className="h-4 w-4" />
+                                            {/* UNITS CONTAINER */}
+                                            {expanded && (
+                                                <div className="border-t border-slate-100 bg-slate-50/50 p-4">
+                                                    {courseUnits.length === 0 ? (
+                                                        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center">
+                                                            <Layers className="mx-auto h-6 w-6 text-slate-400" />
+                                                            <p className="mt-2 text-xs font-medium text-slate-500">
+                                                                No units added yet.
+                                                            </p>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openUnitModal(course.id)}
+                                                                className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-3.5 py-2 text-xs font-black uppercase text-white shadow-sm cursor-pointer"
+                                                            >
+                                                                <Plus className="h-3.5 w-3.5" />
+                                                                Add Unit
+                                                            </button>
+                                                        </div>
                                                     ) : (
-                                                        <ChevronRight className="h-4 w-4" />
-                                                    )}
-                                                </button>
+                                                        <div className="space-y-3">
+                                                            {courseUnits.map((unit: any) => {
+                                                                const unitTopics = getUnitTopics(unit.id);
+                                                                const unitExpanded = expandedUnits[unit.id] ?? true;
+                                                                const unitNum = unit.unitNumber ?? unit.order ?? 1;
+                                                                const unitTitleStr = unit.name ?? unit.title ?? 'Unit';
 
-                                            </div>
-                                        </div>
+                                                                return (
+                                                                    <div
+                                                                        key={unit.id}
+                                                                        className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs"
+                                                                    >
+                                                                        {/* UNIT HEADER */}
+                                                                        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                                                            <div className="flex min-w-0 items-center gap-3">
+                                                                                <span className="shrink-0 rounded-lg bg-indigo-900 px-2.5 py-1 text-xs font-black text-white">
+                                                                                    U{unitNum}
+                                                                                </span>
 
-                                                {/* UNITS CONTAINER */}
-                                                {expanded && (
-                                                    <div className="border-t border-slate-100 bg-slate-50/50 p-4">
-
-                                                        {courseUnits.length ===
-                                                            0 ? (
-
-                                                            <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center">
-
-                                                                <Layers className="mx-auto h-6 w-6 text-slate-400" />
-
-                                                                <p className="mt-2 text-xs font-medium text-slate-500">
-                                                                    No units added yet.
-                                                                </p>
-
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() =>
-                                                                        openUnitModal(
-                                                                            course.id
-                                                                        )
-                                                                    }
-                                                                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold uppercase text-white shadow-sm"
-                                                                >
-                                                                    <Plus className="h-3.5 w-3.5" />
-                                                                    Add Unit
-                                                                </button>
-
-                                                            </div>
-
-                                                        ) : (
-
-                                                            <div className="space-y-3">
-
-                                                                {courseUnits.map(
-                                                                    (
-                                                                        unit: any
-                                                                    ) => {
-
-                                                                        const unitTopics =
-                                                                            getUnitTopics(
-                                                                                unit.id
-                                                                            );
-
-                                                                        const unitExpanded =
-                                                                            expandedUnits[
-                                                                            unit.id
-                                                                            ] ??
-                                                                            true;
-
-                                                                        const unitNum = unit.unitNumber ?? unit.order ?? 1;
-                                                                        const unitTitleStr = unit.name ?? unit.title ?? 'Unit';
-
-                                                                        return (
-
-                                                                            <div
-                                                                                key={
-                                                                                    unit.id
-                                                                                }
-                                                                                className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs"
-                                                                            >
-
-                                                                                {/* UNIT HEADER */}
-                                                                                <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-
-                                                                                    <div className="flex min-w-0 items-center gap-3">
-
-                                                                                        <span className="shrink-0 rounded-lg bg-indigo-900 px-2.5 py-1 text-xs font-black text-white">
-                                                                                            U
-                                                                                            {
-                                                                                                unitNum
-                                                                                            }
-                                                                                        </span>
-
-                                                                                        <div className="min-w-0">
-
-                                                                                            <p className="truncate text-sm font-black text-slate-800">
-                                                                                                {
-                                                                                                    unitTitleStr
-                                                                                                }
-                                                                                            </p>
-
-                                                                                            <p className="mt-0.5 text-xs text-slate-500">
-                                                                                                {
-                                                                                                    unitTopics.length
-                                                                                                }{' '}
-                                                                                                teaching topics
-                                                                                            </p>
-
-                                                                                        </div>
-                                                                                    </div>
-
-                                                                                    <div className="flex shrink-0 items-center gap-2">
-
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() =>
-                                                                                                openTopicModal(
-                                                                                                    unit.id
-                                                                                                )
-                                                                                            }
-                                                                                            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
-                                                                                        >
-                                                                                            <Plus className="h-3.5 w-3.5" />
-                                                                                            Topic
-                                                                                        </button>
-
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() =>
-                                                                                                handleDeleteUnit(
-                                                                                                    unit
-                                                                                                )
-                                                                                            }
-                                                                                            className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
-                                                                                            title="Delete Unit"
-                                                                                        >
-                                                                                            <Trash2 className="h-4 w-4" />
-                                                                                        </button>
-
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() =>
-                                                                                                toggleUnit(
-                                                                                                    unit.id
-                                                                                                )
-                                                                                            }
-                                                                                            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
-                                                                                            title={
-                                                                                                unitExpanded
-                                                                                                    ? 'Collapse Unit'
-                                                                                                    : 'Expand Unit'
-                                                                                            }
-                                                                                        >
-                                                                                            {unitExpanded ? (
-                                                                                                <ChevronDown className="h-4 w-4" />
-                                                                                            ) : (
-                                                                                                <ChevronRight className="h-4 w-4" />
-                                                                                            )}
-                                                                                        </button>
-
-                                                                                    </div>
+                                                                                <div className="min-w-0">
+                                                                                    <p className="truncate text-sm font-black text-slate-800">
+                                                                                        {unitTitleStr}
+                                                                                    </p>
+                                                                                    <p className="mt-0.5 text-xs text-slate-500">
+                                                                                        {unitTopics.length} teaching topics
+                                                                                    </p>
                                                                                 </div>
+                                                                            </div>
 
-                                                                                {/* TOPICS */}
-                                                                                {unitExpanded && (
-                                                                                    <div className="border-t border-slate-100 bg-slate-50/70 p-3">
+                                                                            <div className="flex shrink-0 items-center gap-2">
+                                                                                {/* DISTINCT COLOR: ADD TOPIC (Amber) */}
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => openTopicModal(unit.id)}
+                                                                                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 px-3 py-1.5 text-xs font-black uppercase tracking-wide text-white transition shadow-xs cursor-pointer"
+                                                                                >
+                                                                                    <Plus className="h-3.5 w-3.5" />
+                                                                                    Topic
+                                                                                </button>
 
-                                                                                        {unitTopics.length ===
-                                                                                            0 ? (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => handleDeleteUnit(unit)}
+                                                                                    className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
+                                                                                    title="Delete Unit"
+                                                                                >
+                                                                                    <Trash2 className="h-4 w-4" />
+                                                                                </button>
 
-                                                                                            <div className="rounded-lg border border-dashed border-slate-200 bg-white p-3 text-center text-xs text-slate-400">
-                                                                                                No teaching topics added yet.
-                                                                                            </div>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => toggleUnit(unit.id)}
+                                                                                    className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 cursor-pointer"
+                                                                                    title={unitExpanded ? 'Collapse Unit' : 'Expand Unit'}
+                                                                                >
+                                                                                    {unitExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
 
-                                                                                        ) : (
+                                                                        {/* TOPICS */}
+                                                                        {unitExpanded && (
+                                                                            <div className="border-t border-slate-100 bg-slate-50/70 p-3">
+                                                                                {unitTopics.length === 0 ? (
+                                                                                    <div className="rounded-lg border border-dashed border-slate-200 bg-white p-3 text-center text-xs text-slate-400">
+                                                                                        No teaching topics added yet.
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <div className="space-y-2">
+                                                                                        {unitTopics.map((topic: any, index) => {
+                                                                                            const topicNameStr = topic.name ?? topic.title ?? 'Topic';
+                                                                                            return (
+                                                                                                <div
+                                                                                                    key={topic.id}
+                                                                                                    className="group flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-xs"
+                                                                                                >
+                                                                                                    <div className="min-w-0">
+                                                                                                        <div className="flex items-center gap-3">
+                                                                                                            <span className="shrink-0 text-xs font-bold text-slate-400">
+                                                                                                                {index + 1}
+                                                                                                            </span>
+                                                                                                            <span className="text-sm font-medium text-slate-800">
+                                                                                                                {topicNameStr}
+                                                                                                            </span>
+                                                                                                        </div>
+                                                                                                    </div>
 
-                                                                                            <div className="space-y-2">
+                                                                                                    <div className="flex shrink-0 items-center gap-3">
+                                                                                                        <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">
+                                                                                                            <Clock3 className="h-3 w-3" />
+                                                                                                            {topic.plannedClasses} periods
+                                                                                                        </span>
 
-                                                                                                {unitTopics.map(
-                                                                                                    (
-                                                                                                        topic: any,
-                                                                                                        index
-                                                                                                    ) => {
-                                                                                                        const topicNameStr = topic.name ?? topic.title ?? 'Topic';
-                                                                                                        return (
-                                                                                                            <div
-                                                                                                                key={
-                                                                                                                    topic.id
-                                                                                                                }
-                                                                                                                className="group flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-xs"
-                                                                                                            >
-
-                                                                                                                <div className="min-w-0">
-
-                                                                                                                    <div className="flex items-center gap-3">
-
-                                                                                                                        <span className="shrink-0 text-xs font-bold text-slate-400">
-                                                                                                                            {
-                                                                                                                                index +
-                                                                                                                                1
-                                                                                                                            }
-                                                                                                                        </span>
-
-                                                                                                                        <span className="text-sm font-medium text-slate-800">
-                                                                                                                            {
-                                                                                                                                topicNameStr
-                                                                                                                            }
-                                                                                                                        </span>
-
-                                                                                                                    </div>
-                                                                                                                </div>
-
-                                                                                                                <div className="flex shrink-0 items-center gap-3">
-
-                                                                                                                    <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
-
-                                                                                                                        <Clock3 className="h-3 w-3" />
-
-                                                                                                                        {
-                                                                                                                            topic.plannedClasses
-                                                                                                                        }{' '}
-                                                                                                                        periods
-
-                                                                                                                    </span>
-
-                                                                                                                    <button
-                                                                                                                        type="button"
-                                                                                                                        onClick={() =>
-                                                                                                                            handleDeleteTopic(
-                                                                                                                                topic
-                                                                                                                            )
-                                                                                                                        }
-                                                                                                                        className="rounded p-1.5 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600"
-                                                                                                                        title="Delete Topic"
-                                                                                                                    >
-                                                                                                                        <X className="h-4 w-4" />
-                                                                                                                    </button>
-
-                                                                                                                </div>
-                                                                                            </div>
-                                                                                        );
-                                                                                    }
-                                                                                )}
-
-                                                                                            </div>
-                                                                                        )}
-
+                                                                                                        <button
+                                                                                                            type="button"
+                                                                                                            onClick={() => handleDeleteTopic(topic)}
+                                                                                                            className="rounded p-1.5 text-slate-300 opacity-0 transition group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
+                                                                                                            title="Delete Topic"
+                                                                                                        >
+                                                                                                            <X className="h-4 w-4" />
+                                                                                                        </button>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            );
+                                                                                        })}
                                                                                     </div>
                                                                                 )}
                                                                             </div>
-                                                                        );
-                                                                    }
-                                                                )}
-
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    }
-                                )}
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </section>
                         )}
                     </div>
@@ -2144,196 +1801,104 @@ function SyllabusContent() {
                         }
                     }}
                 >
-
-                    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-
+                    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
                         <div className="mb-5 flex items-center justify-between border-b pb-4">
-
                             <div className="flex items-center gap-3">
-
                                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                                     <GraduationCap className="h-5 w-5" />
                                 </div>
-
                                 <div>
-
                                     <h3 className="text-base font-black text-slate-900">
                                         Add Class / Semester Workspace
                                     </h3>
-
-                                    {sessionClassesAdded >
-                                        0 && (
-                                            <p className="mt-0.5 text-[11px] font-bold text-emerald-600">
-                                                {
-                                                    sessionClassesAdded
-                                                }{' '}
-                                                workspace
-                                                {sessionClassesAdded >
-                                                    1
-                                                    ? 's'
-                                                    : ''}{' '}
-                                                added in this session
-                                            </p>
-                                        )}
-
+                                    {sessionClassesAdded > 0 && (
+                                        <p className="mt-0.5 text-[11px] font-bold text-emerald-600">
+                                            {sessionClassesAdded} workspace{sessionClassesAdded > 1 ? 's' : ''} added in this session
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
                             <button
                                 type="button"
                                 onClick={() => {
-                                    setIsClassModalOpen(
-                                        false
-                                    );
-                                    setSessionClassesAdded(
-                                        0
-                                    );
+                                    setIsClassModalOpen(false);
+                                    setSessionClassesAdded(0);
                                 }}
-                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 cursor-pointer"
                             >
                                 <X className="h-5 w-5" />
                             </button>
-
                         </div>
 
-                        <form
-                            onSubmit={(e) =>
-                                handleSaveClass(
-                                    e,
-                                    false
-                                )
-                            }
-                            className="space-y-4"
-                        >
-
+                        <form onSubmit={(e) => handleSaveClass(e, false)} className="space-y-4">
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Class / Semester Name *
                                 </label>
-
                                 <input
                                     type="text"
                                     placeholder="e.g. Class 6, Semester 1, BA First Year"
-                                    value={
-                                        newClassName
-                                    }
-                                    onChange={(e) =>
-                                        setNewClassName(
-                                            e.target
-                                                .value
-                                        )
-                                    }
+                                    value={newClassName}
+                                    onChange={(e) => setNewClassName(e.target.value)}
                                     required
                                     autoFocus
-                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
                                 />
-
                             </div>
 
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Stream / Faculty
                                 </label>
-
                                 <select
-                                    value={
-                                        newClassStream
-                                    }
+                                    value={newClassStream}
                                     onChange={(e) => {
-                                        setNewClassStream(
-                                            e.target
-                                                .value
-                                        );
-
-                                        if (
-                                            e.target
-                                                .value !==
-                                            'Other / Custom'
-                                        ) {
-                                            setCustomClassStream(
-                                                ''
-                                            );
+                                        setNewClassStream(e.target.value);
+                                        if (e.target.value !== 'Other / Custom') {
+                                            setCustomClassStream('');
                                         }
                                     }}
-                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 cursor-pointer"
                                 >
-                                    <option value="General / Academic">
-                                        General / Academic
-                                    </option>
-
-                                    <option value="Arts Stream">
-                                        Arts Stream
-                                    </option>
-
-                                    <option value="Science Stream">
-                                        Science Stream
-                                    </option>
-
-                                    <option value="Commerce Stream">
-                                        Commerce Stream
-                                    </option>
-
-                                    <option value="Vocational">
-                                        Vocational
-                                    </option>
-
-                                    <option value="Other / Custom">
-                                        Other / Custom
-                                    </option>
+                                    <option value="General / Academic" className="text-slate-900 font-bold bg-white">General / Academic</option>
+                                    <option value="Arts Stream" className="text-slate-900 font-bold bg-white">Arts Stream</option>
+                                    <option value="Science Stream" className="text-slate-900 font-bold bg-white">Science Stream</option>
+                                    <option value="Commerce Stream" className="text-slate-900 font-bold bg-white">Commerce Stream</option>
+                                    <option value="Vocational" className="text-slate-900 font-bold bg-white">Vocational</option>
+                                    <option value="Other / Custom" className="text-slate-900 font-bold bg-white">Other / Custom</option>
                                 </select>
 
-                                {newClassStream ===
-                                    'Other / Custom' && (
-                                        <input
-                                            type="text"
-                                            placeholder="Enter Custom Stream"
-                                            value={
-                                                customClassStream
-                                            }
-                                            onChange={(e) =>
-                                                setCustomClassStream(
-                                                    e.target
-                                                        .value
-                                                )
-                                            }
-                                            required
-                                            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
-                                        />
-                                    )}
-
+                                {newClassStream === 'Other / Custom' && (
+                                    <input
+                                        type="text"
+                                        placeholder="Enter Custom Stream"
+                                        value={customClassStream}
+                                        onChange={(e) => setCustomClassStream(e.target.value)}
+                                        required
+                                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
+                                    />
+                                )}
                             </div>
 
-                            {sessionClassesAdded >
-                                0 && (
-                                    <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-xs text-emerald-800">
-
-                                        <div className="flex items-start gap-2">
-
-                                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-
-                                            <div>
-
-                                                <p className="font-black">
-                                                    Workspace added successfully.
-                                                </p>
-
-                                                <p className="mt-0.5 leading-5 text-emerald-700">
-                                                    You can continue adding your other classes or semesters below.
-                                                </p>
-
-                                            </div>
-
+                            {sessionClassesAdded > 0 && (
+                                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-xs text-emerald-800">
+                                    <div className="flex items-start gap-2">
+                                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                                        <div>
+                                            <p className="font-black">Workspace added successfully.</p>
+                                            <p className="mt-0.5 leading-5 text-emerald-700">
+                                                You can continue adding your other classes or semesters below.
+                                            </p>
                                         </div>
                                     </div>
-                                )}
+                                </div>
+                            )}
 
                             <div className="flex flex-col gap-2 border-t pt-4">
-
                                 <button
                                     type="submit"
-                                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-xs font-black uppercase text-white shadow-sm transition hover:bg-blue-700"
+                                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-xs font-black uppercase text-white shadow-sm transition hover:bg-indigo-700 cursor-pointer"
                                 >
                                     <Check className="h-4 w-4" />
                                     Create Workspace
@@ -2341,13 +1906,8 @@ function SyllabusContent() {
 
                                 <button
                                     type="button"
-                                    onClick={() =>
-                                        handleSaveClass(
-                                            undefined,
-                                            true
-                                        )
-                                    }
-                                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-blue-600 bg-blue-50 px-5 py-3 text-xs font-black uppercase text-blue-700 shadow-sm transition hover:bg-blue-100"
+                                    onClick={() => handleSaveClass(undefined, true)}
+                                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-indigo-600 bg-indigo-50 px-5 py-3 text-xs font-black uppercase text-indigo-700 shadow-sm transition hover:bg-indigo-100 cursor-pointer"
                                 >
                                     <Plus className="h-4 w-4" />
                                     Save & Add More Classes / Semesters
@@ -2356,20 +1916,14 @@ function SyllabusContent() {
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        setIsClassModalOpen(
-                                            false
-                                        );
-                                        setSessionClassesAdded(
-                                            0
-                                        );
+                                        setIsClassModalOpen(false);
+                                        setSessionClassesAdded(0);
                                     }}
-                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
                                 >
                                     Cancel
                                 </button>
-
                             </div>
-
                         </form>
                     </div>
                 </div>
@@ -2380,148 +1934,89 @@ function SyllabusContent() {
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
                     onMouseDown={(e) => {
-                        if (
-                            e.target ===
-                            e.currentTarget
-                        ) {
-                            setIsCourseModalOpen(
-                                false
-                            );
+                        if (e.target === e.currentTarget) {
+                            setIsCourseModalOpen(false);
                         }
                     }}
                 >
-
-                    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-
+                    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
                         <div className="mb-5 flex items-center justify-between border-b pb-4">
-
                             <div className="flex items-center gap-3">
-
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                                     <BookOpen className="h-5 w-5" />
                                 </div>
-
                                 <h3 className="text-base font-black text-slate-900">
                                     Add Subject / Paper
                                 </h3>
-
                             </div>
 
                             <button
                                 type="button"
-                                onClick={() =>
-                                    setIsCourseModalOpen(
-                                        false
-                                    )
-                                }
-                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+                                onClick={() => setIsCourseModalOpen(false)}
+                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 cursor-pointer"
                             >
                                 <X className="h-5 w-5" />
                             </button>
-
                         </div>
 
-                        <form
-                            onSubmit={
-                                handleSaveCourse
-                            }
-                            className="space-y-4"
-                        >
-
+                        <form onSubmit={handleSaveCourse} className="space-y-4">
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Subject Name *
                                 </label>
-
                                 <input
                                     type="text"
                                     placeholder="e.g. Communicative English"
-                                    value={
-                                        courseName
-                                    }
-                                    onChange={(e) =>
-                                        setCourseName(
-                                            e.target
-                                                .value
-                                        )
-                                    }
+                                    value={courseName}
+                                    onChange={(e) => setCourseName(e.target.value)}
                                     required
                                     autoFocus
-                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
                                 />
-
                             </div>
 
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Paper Code *
                                 </label>
-
                                 <input
                                     type="text"
                                     placeholder="e.g. ENG-101"
-                                    value={
-                                        courseCode
-                                    }
-                                    onChange={(e) =>
-                                        setCourseCode(
-                                            e.target
-                                                .value
-                                        )
-                                    }
+                                    value={courseCode}
+                                    onChange={(e) => setCourseCode(e.target.value)}
                                     required
-                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium uppercase outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
                                 />
-
                             </div>
 
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Target Teaching Periods
                                 </label>
-
                                 <input
                                     type="number"
                                     min="1"
-                                    value={
-                                        courseHours
-                                    }
-                                    onChange={(e) =>
-                                        setCourseHours(
-                                            e.target
-                                                .value
-                                        )
-                                    }
-                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={courseHours}
+                                    onChange={(e) => setCourseHours(e.target.value)}
+                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500 text-slate-900"
                                 />
-
                             </div>
 
                             <div className="flex justify-end gap-2 border-t pt-4">
-
                                 <button
                                     type="button"
-                                    onClick={() =>
-                                        setIsCourseModalOpen(
-                                            false
-                                        )
-                                    }
-                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                                    onClick={() => setIsCourseModalOpen(false)}
+                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
                                 >
                                     Cancel
                                 </button>
-
                                 <button
                                     type="submit"
-                                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-black uppercase text-white transition hover:bg-blue-700"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black uppercase text-white transition hover:bg-emerald-700 cursor-pointer"
                                 >
                                     <Check className="h-4 w-4" />
                                     Save Subject
                                 </button>
-
                             </div>
                         </form>
                     </div>
@@ -2533,170 +2028,94 @@ function SyllabusContent() {
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
                     onMouseDown={(e) => {
-                        if (
-                            e.target ===
-                            e.currentTarget
-                        ) {
-                            setIsUnitModalOpen(
-                                false
-                            );
+                        if (e.target === e.currentTarget) {
+                            setIsUnitModalOpen(false);
                         }
                     }}
                 >
-
-                    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-
+                    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
                         <div className="mb-5 flex items-center justify-between border-b pb-4">
-
                             <div className="flex items-center gap-3">
-
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
                                     <Layers className="h-5 w-5" />
                                 </div>
-
                                 <h3 className="text-base font-black text-slate-900">
                                     Add Unit
                                 </h3>
-
                             </div>
 
                             <button
                                 type="button"
-                                onClick={() =>
-                                    setIsUnitModalOpen(
-                                        false
-                                    )
-                                }
-                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+                                onClick={() => setIsUnitModalOpen(false)}
+                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 cursor-pointer"
                             >
                                 <X className="h-5 w-5" />
                             </button>
-
                         </div>
 
-                        <form
-                            onSubmit={
-                                handleSaveUnit
-                            }
-                            className="space-y-4"
-                        >
-
+                        <form onSubmit={handleSaveUnit} className="space-y-4">
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Subject / Paper *
                                 </label>
-
                                 <select
-                                    value={
-                                        targetCourseIdForUnit
-                                    }
-                                    onChange={(e) =>
-                                        setTargetCourseIdForUnit(
-                                            e.target
-                                                .value
-                                        )
-                                    }
-                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={targetCourseIdForUnit}
+                                    onChange={(e) => setTargetCourseIdForUnit(e.target.value)}
+                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-violet-500 text-slate-900 cursor-pointer"
                                 >
-                                    <option value="">
-                                        Select subject
-                                    </option>
-
-                                    {activeClassCourses.map(
-                                        (
-                                            course
-                                        ) => (
-                                            <option
-                                                key={
-                                                    course.id
-                                                }
-                                                value={
-                                                    course.id
-                                                }
-                                            >
-                                                {
-                                                    course.name
-                                                }
-                                            </option>
-                                        )
-                                    )}
+                                    <option value="" className="text-slate-400 bg-white">Select subject</option>
+                                    {activeClassCourses.map((course) => (
+                                        <option key={course.id} value={course.id} className="text-slate-900 font-bold bg-white">
+                                            {course.name}
+                                        </option>
+                                    ))}
                                 </select>
-
                             </div>
 
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Unit Number
                                 </label>
-
                                 <input
                                     type="number"
                                     min="1"
-                                    value={
-                                        unitNumber
-                                    }
-                                    onChange={(e) =>
-                                        setUnitNumber(
-                                            e.target
-                                                .value
-                                        )
-                                    }
-                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={unitNumber}
+                                    onChange={(e) => setUnitNumber(e.target.value)}
+                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-violet-500 text-slate-900"
                                 />
-
                             </div>
 
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Unit Title *
                                 </label>
-
                                 <input
                                     type="text"
                                     placeholder="e.g. Classical Thinkers"
-                                    value={
-                                        unitName
-                                    }
-                                    onChange={(e) =>
-                                        setUnitName(
-                                            e.target
-                                                .value
-                                        )
-                                    }
+                                    value={unitName}
+                                    onChange={(e) => setUnitName(e.target.value)}
                                     required
                                     autoFocus
-                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-violet-500 text-slate-900"
                                 />
-
                             </div>
 
                             <div className="flex justify-end gap-2 border-t pt-4">
-
                                 <button
                                     type="button"
-                                    onClick={() =>
-                                        setIsUnitModalOpen(
-                                            false
-                                        )
-                                    }
-                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                                    onClick={() => setIsUnitModalOpen(false)}
+                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
                                 >
                                     Cancel
                                 </button>
-
                                 <button
                                     type="submit"
-                                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-black uppercase text-white transition hover:bg-blue-700"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-black uppercase text-white transition hover:bg-violet-700 cursor-pointer"
                                 >
                                     <Check className="h-4 w-4" />
                                     Save Unit
                                 </button>
-
                             </div>
-
                         </form>
                     </div>
                 </div>
@@ -2707,173 +2126,94 @@ function SyllabusContent() {
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
                     onMouseDown={(e) => {
-                        if (
-                            e.target ===
-                            e.currentTarget
-                        ) {
-                            setIsTopicModalOpen(
-                                false
-                            );
+                        if (e.target === e.currentTarget) {
+                            setIsTopicModalOpen(false);
                         }
                     }}
                 >
-
-                    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-
+                    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
                         <div className="mb-5 flex items-center justify-between border-b pb-4">
-
                             <div className="flex items-center gap-3">
-
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
                                     <Target className="h-5 w-5" />
                                 </div>
-
                                 <h3 className="text-base font-black text-slate-900">
                                     Add Teaching Topic
                                 </h3>
-
                             </div>
 
                             <button
                                 type="button"
-                                onClick={() =>
-                                    setIsTopicModalOpen(
-                                        false
-                                    )
-                                }
-                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+                                onClick={() => setIsTopicModalOpen(false)}
+                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 cursor-pointer"
                             >
                                 <X className="h-5 w-5" />
                             </button>
-
                         </div>
 
-                        <form
-                            onSubmit={
-                                handleSaveTopic
-                            }
-                            className="space-y-4"
-                        >
-
+                        <form onSubmit={handleSaveTopic} className="space-y-4">
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Unit *
                                 </label>
-
                                 <select
-                                    value={
-                                        targetUnitIdForTopic
-                                    }
-                                    onChange={(e) =>
-                                        setTargetUnitIdForTopic(
-                                            e.target
-                                                .value
-                                        )
-                                    }
-                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={targetUnitIdForTopic}
+                                    onChange={(e) => setTargetUnitIdForTopic(e.target.value)}
+                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-amber-500 text-slate-900 cursor-pointer"
                                 >
-                                    <option value="">
-                                        Select unit
-                                    </option>
-
-                                    {activeStats.units.map(
-                                        (
-                                            unit: any
-                                        ) => (
-                                            <option
-                                                key={
-                                                    unit.id
-                                                }
-                                                value={
-                                                    unit.id
-                                                }
-                                            >
-                                                U
-                                                {unit.unitNumber ?? unit.order ?? 1}
-                                                {' '}—{' '}
-                                                {
-                                                    unit.name ?? unit.title
-                                                }
-                                            </option>
-                                        )
-                                    )}
+                                    <option value="" className="text-slate-400 bg-white">Select unit</option>
+                                    {activeStats.units.map((unit: any) => (
+                                        <option key={unit.id} value={unit.id} className="text-slate-900 font-bold bg-white">
+                                            U{unit.unitNumber ?? unit.order ?? 1} — {unit.name ?? unit.title}
+                                        </option>
+                                    ))}
                                 </select>
-
                             </div>
 
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Topic Title *
                                 </label>
-
                                 <input
                                     type="text"
                                     placeholder="e.g. Aristotle's Model"
-                                    value={
-                                        topicName
-                                    }
-                                    onChange={(e) =>
-                                        setTopicName(
-                                            e.target
-                                                .value
-                                        )
-                                    }
+                                    value={topicName}
+                                    onChange={(e) => setTopicName(e.target.value)}
                                     required
                                     autoFocus
-                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-amber-500 text-slate-900"
                                 />
-
                             </div>
 
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Planned Teaching Periods
                                 </label>
-
                                 <input
                                     type="number"
                                     min="1"
-                                    value={
-                                        plannedClasses
-                                    }
-                                    onChange={(e) =>
-                                        setPlannedClasses(
-                                            e.target
-                                                .value
-                                        )
-                                    }
-                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={plannedClasses}
+                                    onChange={(e) => setPlannedClasses(e.target.value)}
+                                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-amber-500 text-slate-900"
                                 />
-
                             </div>
 
                             <div className="flex justify-end gap-2 border-t pt-4">
-
                                 <button
                                     type="button"
-                                    onClick={() =>
-                                        setIsTopicModalOpen(
-                                            false
-                                        )
-                                    }
-                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                                    onClick={() => setIsTopicModalOpen(false)}
+                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
                                 >
                                     Cancel
                                 </button>
-
                                 <button
                                     type="submit"
-                                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-black uppercase text-white transition hover:bg-blue-700"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-5 py-2.5 text-xs font-black uppercase text-white transition hover:bg-amber-700 cursor-pointer"
                                 >
                                     <Check className="h-4 w-4" />
                                     Save Topic
                                 </button>
-
                             </div>
-
                         </form>
                     </div>
                 </div>
@@ -2897,89 +2237,47 @@ function SyllabusContent() {
                         }
                     }}
                 >
-
-                    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-
+                    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95">
                         <div className="mb-5 flex items-center justify-between border-b pb-4">
-
                             <div className="flex items-center gap-3">
-
                                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
                                     <Copy className="h-5 w-5" />
                                 </div>
-
                                 <div>
-
                                     <h3 className="text-base font-black text-slate-900">
                                         Clone Syllabus
                                     </h3>
-
                                     <p className="text-xs text-slate-500">
                                         Copy curriculum between workspaces
                                     </p>
-
                                 </div>
                             </div>
 
                             <button
                                 type="button"
-                                onClick={() =>
-                                    setIsCloneModalOpen(
-                                        false
-                                    )
-                                }
-                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+                                onClick={() => setIsCloneModalOpen(false)}
+                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 cursor-pointer"
                             >
                                 <X className="h-5 w-5" />
                             </button>
-
                         </div>
 
-                        <form
-                            onSubmit={
-                                handleClone
-                            }
-                            className="space-y-4"
-                        >
-
+                        <form onSubmit={handleClone} className="space-y-4">
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Copy From
                                 </label>
-
                                 <select
-                                    value={
-                                        cloneSourceId
-                                    }
-                                    onChange={(e) =>
-                                        setCloneSourceId(
-                                            e.target
-                                                .value
-                                        )
-                                    }
-                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={cloneSourceId}
+                                    onChange={(e) => setCloneSourceId(e.target.value)}
+                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 cursor-pointer"
                                 >
-                                    {data.classes.map(
-                                        (
-                                            item
-                                        ) => (
-                                            <option
-                                                key={
-                                                    item.id
-                                                }
-                                                value={
-                                                    item.id
-                                                }
-                                            >
-                                                {
-                                                    item.name
-                                                }
-                                            </option>
-                                        )
-                                    )}
+                                    {data.classes.map((item) => (
+                                        <option key={item.id} value={item.id} className="text-slate-900 font-bold bg-white">
+                                            {item.name}
+                                        </option>
+                                    ))}
                                 </select>
-
                             </div>
 
                             <div className="flex justify-center text-slate-400">
@@ -2987,57 +2285,23 @@ function SyllabusContent() {
                             </div>
 
                             <div>
-
                                 <label className="mb-1.5 block text-xs font-bold text-slate-700">
                                     Copy To
                                 </label>
-
                                 <select
-                                    value={
-                                        cloneTargetId
-                                    }
-                                    onChange={(e) =>
-                                        setCloneTargetId(
-                                            e.target
-                                                .value
-                                        )
-                                    }
-                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    value={cloneTargetId}
+                                    onChange={(e) => setCloneTargetId(e.target.value)}
+                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 cursor-pointer"
                                 >
-
-                                    <option value="">
-                                        Select target class
-                                    </option>
-
+                                    <option value="" className="text-slate-400 bg-white">Select target class</option>
                                     {data.classes
-                                        .filter(
-                                            (
-                                                item
-                                            ) =>
-                                                item.id !==
-                                                cloneSourceId
-                                        )
-                                        .map(
-                                            (
-                                                item
-                                            ) => (
-                                                <option
-                                                    key={
-                                                        item.id
-                                                    }
-                                                    value={
-                                                        item.id
-                                                    }
-                                                >
-                                                    {
-                                                        item.name
-                                                    }
-                                                </option>
-                                            )
-                                        )}
-
+                                        .filter((item) => item.id !== cloneSourceId)
+                                        .map((item) => (
+                                            <option key={item.id} value={item.id} className="text-slate-900 font-bold bg-white">
+                                                {item.name}
+                                            </option>
+                                        ))}
                                 </select>
-
                             </div>
 
                             <div className="rounded-xl border border-amber-100 bg-amber-50 p-3.5 text-xs leading-5 text-amber-800">
@@ -3045,29 +2309,21 @@ function SyllabusContent() {
                             </div>
 
                             <div className="flex justify-end gap-2 border-t pt-4">
-
                                 <button
                                     type="button"
-                                    onClick={() =>
-                                        setIsCloneModalOpen(
-                                            false
-                                        )
-                                    }
-                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                                    onClick={() => setIsCloneModalOpen(false)}
+                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
                                 >
                                     Cancel
                                 </button>
-
                                 <button
                                     type="submit"
-                                    className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-black uppercase text-white transition hover:bg-violet-700"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-black uppercase text-white transition hover:bg-violet-700 cursor-pointer"
                                 >
                                     <Copy className="h-4 w-4" />
                                     Clone Syllabus
                                 </button>
-
                             </div>
-
                         </form>
                     </div>
                 </div>

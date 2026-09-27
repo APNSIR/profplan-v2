@@ -49,13 +49,13 @@ export default function ReportsPrintPage() {
 
     const totalDeliveredHours = useMemo(() => {
         return sortedLogs
-            .filter((l: any) => l.status === 'Taken' || l.status === 'Compensated')
+            .filter((l: any) => l.status === 'Taken' || l.status === 'Compensated' || l.status === 'completed' || l.status === 'partial')
             .reduce((sum: number, log: any) => sum + Number(log.hours || 0), 0);
     }, [sortedLogs]);
 
     const totalClassesTaken = useMemo(() => {
         return sortedLogs.filter(
-            (l: any) => l.status === 'Taken' || l.status === 'Compensated'
+            (l: any) => l.status === 'Taken' || l.status === 'Compensated' || l.status === 'completed' || l.status === 'partial'
         ).length;
     }, [sortedLogs]);
 
@@ -140,12 +140,12 @@ export default function ReportsPrintPage() {
 
                 <div className="flex items-center gap-3">
                     <span className="text-xs text-slate-500 hidden sm:inline">
-                        Optimized for A4 Landscape
+                        Optimized for A4 Landscape Inspection
                     </span>
                     <button
                         type="button"
                         onClick={() => window.print()}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl shadow transition transform active:scale-95"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl shadow transition transform active:scale-95 cursor-pointer"
                     >
                         <Printer className="w-4 h-4" />
                         Print / Save as PDF
@@ -174,11 +174,11 @@ export default function ReportsPrintPage() {
                         </div>
                         <div>
                             <span className="text-slate-500 font-normal">Department: </span>
-                            <strong>{profile?.department || 'Sociology / General'}</strong>
+                            <strong>{profile?.department || 'English / General'}</strong>
                         </div>
                         <div>
                             <span className="text-slate-500 font-normal">Designation: </span>
-                            <strong>{profile?.designation || 'Lecturer / Asst. Professor'}</strong>
+                            <strong>{profile?.designation || 'Lecturer / HOD'}</strong>
                         </div>
                         <div className="text-right">
                             <span className="text-slate-500 font-normal">Classes / Delivered: </span>
@@ -260,24 +260,34 @@ export default function ReportsPrintPage() {
                     </tbody>
                 </table>
 
-                {/* SIGNATURE & VERIFICATION BLOCK */}
-                <div className="mt-14 pt-4 border-t-2 border-slate-900 grid grid-cols-3 gap-6 text-center text-xs font-bold text-slate-900 break-inside-avoid">
+                {/* 4-TIER OFFICIAL SIGNATURE & VERIFICATION BLOCK */}
+                <div className="mt-14 pt-4 border-t-2 border-slate-900 grid grid-cols-4 gap-4 text-center text-xs font-bold text-slate-900 break-inside-avoid">
                     <div>
                         <div className="h-10"></div>
                         <div className="border-t border-slate-800 pt-1.5">
-                            Signature of Teacher / Educator
+                            Teacher&apos;s Signature
+                            <div className="text-[10px] font-normal text-slate-600 mt-0.5">{profile?.name || 'Educator'}</div>
                         </div>
                     </div>
                     <div>
                         <div className="h-10"></div>
                         <div className="border-t border-slate-800 pt-1.5">
-                            Verified by Head of Department (HOD)
+                            HOD Signature
+                            <div className="text-[10px] font-normal text-slate-600 mt-0.5">Head of Department</div>
                         </div>
                     </div>
                     <div>
                         <div className="h-10"></div>
                         <div className="border-t border-slate-800 pt-1.5">
-                            Countersigned by Principal / Dean
+                            Academic Bursar
+                            <div className="text-[10px] font-normal text-slate-600 mt-0.5">Bursar / Coordinator</div>
+                        </div>
+                    </div>
+                    <div>
+                        <div className="h-10"></div>
+                        <div className="border-t border-slate-800 pt-1.5">
+                            Principal Signature
+                            <div className="text-[10px] font-normal text-slate-600 mt-0.5">Principal / Head of Institution</div>
                         </div>
                     </div>
                 </div>

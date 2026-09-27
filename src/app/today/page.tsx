@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { load, save, ProfPlanData } from '@/lib/store';
+
+import { load, save, type ProfPlanData, type Log } from '@/lib/store';
 import DataHubModal from '@/components/DataHubModal';
+import OnboardingModal from '@/components/OnboardingModal';
+
 import {
     Calendar,
     Clock,
@@ -18,18 +21,257 @@ import {
     RotateCcw,
     X,
     ArrowRight,
-    GraduationCap,
     CalendarDays,
     Plus,
-    AlertTriangle,
     SunMedium,
     ShieldAlert,
     Layers,
     Trash2,
     BarChart3,
     ShieldCheck,
-    Download
+    BookMarked,
+    Info,
 } from 'lucide-react';
+
+/* =========================================================
+   ACADEMIC HIERARCHY
+   ---------------------------------------------------------
+   Deliberately uses word boundaries so:
+
+   Class I   != Class IX
+   Class XI  != Class I
+   Class XII != Class II
+   ========================================================= */
+
+function getHierarchyRank(className: string = ''): number {
+    const lower = String(className || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ');
+
+    if (
+        /\bclass\s+(i|ii|iii|iv|v)\b/.test(lower) ||
+        /\bprimary\b/.test(lower)
+    ) {
+        return 1;
+    }
+
+    if (
+        /\bclass\s+(vi|vii|viii)\b/.test(lower) ||
+        /\bupper\s+primary\b/.test(lower) ||
+        /\bme\s+level\b/.test(lower)
+    ) {
+        return 2;
+    }
+
+    if (
+        /\bclass\s+(ix|x)\b/.test(lower) ||
+        /\bsecondary\b/.test(lower) ||
+        /\bhigh\s+school\b/.test(lower)
+    ) {
+        return 3;
+    }
+
+    if (
+        /\+2\b/.test(lower) ||
+        /\bhigher\s+secondary\b/.test(lower) ||
+        /\bclass\s+(xi|xii)\b/.test(lower) ||
+        /\bxi\b/.test(lower) ||
+        /\bxii\b/.test(lower) ||
+        /\bjunior\s+college\b/.test(lower)
+    ) {
+        return 4;
+    }
+
+    if (
+        /\bug\b/.test(lower) ||
+        /\bsemester\b/.test(lower) ||
+        /\bba\b/.test(lower) ||
+        /\bbsc\b/.test(lower) ||
+        /\bbcom\b/.test(lower) ||
+        /\bundergraduate\b/.test(lower)
+    ) {
+        return 5;
+    }
+
+    if (
+        /\bpg\b/.test(lower) ||
+        /\bmaster\b/.test(lower) ||
+        /\bpostgraduate\b/.test(lower)
+    ) {
+        return 6;
+    }
+
+    return 7;
+}
+
+function sortClassesByHierarchy(classesList: ProfPlanData['classes']) {
+    if (!Array.isArray(classesList)) return [];
+
+    return [...classesList].sort((a, b) => {
+        const nameA = String(a?.name || '');
+        const nameB = String(b?.name || '');
+
+        const rankA = getHierarchyRank(nameA);
+        const rankB = getHierarchyRank(nameB);
+
+        if (rankA !== rankB) {
+            return rankA - rankB;
+        }
+
+        return nameA.localeCompare(nameB, undefined, {
+            numeric: true,
+            sensitivity: 'base',
+        });
+    });
+}
+
+/* =========================================================
+   TODAY-PAGE EXTENDED TYPES
+   ---------------------------------------------------------
+   We intentionally keep these local.
+   No changes to types.ts are required.
+   ========================================================= */
+
+type TodayLog = Log & {
+    slotId?: string;
+    plannedTopicName?: string;
+    covered?: string;
+    classSource?: string;
+    classType?: string;
+    type?: string;
+    actualStart?: string;
+    actualEnd?: string;
+    attendance?: number;
+    room?: string;
+    semester?: string;
+    legacyStatus?: string;
+    customSubjectName?: string;
+};
+
+type TodaySlot = ProfPlanData['slots'][number] & {
+    period?: number;
+    semesterClass?: string;
+};
+
+type TodayHoliday = ProfPlanData['holidays'][number] & {
+    type?: string;
+};
+
+/* =========================================================
+   STATUS HELPERS
+   ========================================================= */
+
+type DisplayStatus =
+    | 'Taken'
+    | 'Compensated'
+    | 'Cancelled'
+    | 'Unknown';
+
+function getNormalizedStatus(log: TodayLog): DisplayStatus {
+    const status = String(log.status || '').trim().toLowerCase();
+    const legacy = String(log.legacyStatus || '').trim().toLowerCase();
+
+    if (
+        status === 'cancelled' ||
+        status === 'canceled' ||
+        legacy === 'cancelled' ||
+        legacy === 'canceled'
+    ) {
+        return 'Cancelled';
+    }
+
+    if (
+        status === 'partial' ||
+        status === 'compensated' ||
+        legacy === 'compensated'
+    ) {
+        return 'Compensated';
+    }
+
+    if (
+        status === 'completed' ||
+        status === 'taken' ||
+        legacy === 'taken'
+    ) {
+        return 'Taken';
+    }
+
+    return 'Unknown';
+}
+
+function isTeachingCompleted(log: TodayLog): boolean {
+    const normalized = getNormalizedStatus(log);
+
+    return (
+        normalized === 'Taken' ||
+        normalized === 'Compensated'
+    );
+}
+
+function isCancelledLog(log: TodayLog): boolean {
+    return getNormalizedStatus(log) === 'Cancelled';
+}
+
+function getStatusLabel(log: TodayLog): string {
+    const normalized = getNormalizedStatus(log);
+
+    if (normalized === 'Unknown') {
+        return log.status || log.legacyStatus || 'Recorded';
+    }
+
+    return normalized;
+}
+
+/* =========================================================
+   TIME HELPER
+   ========================================================= */
+
+function timeToMinutes(timeStr?: string): number {
+    if (!timeStr) return Number.MAX_SAFE_INTEGER;
+
+    const value = String(timeStr).trim();
+
+    const match = value.match(/^(\d{1,2}):(\d{2})$/);
+
+    if (!match) {
+        return Number.MAX_SAFE_INTEGER;
+    }
+
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+
+    if (
+        !Number.isFinite(hours) ||
+        !Number.isFinite(minutes) ||
+        hours < 0 ||
+        hours > 23 ||
+        minutes < 0 ||
+        minutes > 59
+    ) {
+        return Number.MAX_SAFE_INTEGER;
+    }
+
+    return hours * 60 + minutes;
+}
+
+/* =========================================================
+   SAFE ID HELPER
+   ========================================================= */
+
+function createLocalId(prefix: string): string {
+    return (
+        prefix +
+        '_' +
+        Date.now() +
+        '_' +
+        Math.random().toString(36).slice(2, 9)
+    );
+}
+
+/* =========================================================
+   COMPONENT
+   ========================================================= */
 
 export default function TodayPage() {
     const [mounted, setMounted] = useState(false);
@@ -41,574 +283,1095 @@ export default function TodayPage() {
         topics: [],
         slots: [],
         logs: [],
-        holidays: []
+        holidays: [],
     });
 
-    const [activeSlot, setActiveSlot] = useState<any>(null);
+    const [activeSlot, setActiveSlot] = useState<TodaySlot | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    // ---------------------------------------------------------
-    // 1. DATA HUB MODAL (BACKUP & REGISTER EXPORT)
-    // ---------------------------------------------------------
     const [isDataHubOpen, setIsDataHubOpen] = useState(false);
-
-    // ---------------------------------------------------------
-    // ADD CLASS / SEMESTER MODAL
-    // ---------------------------------------------------------
     const [isAddClassModalOpen, setIsAddClassModalOpen] = useState(false);
-    const [newClassName, setNewClassName] = useState('');
-    const [newClassStream, setNewClassStream] = useState('Arts');
-    const [isCustomStream, setIsCustomStream] = useState(false);
-    const [newlyAddedClasses, setNewlyAddedClasses] = useState<any[]>([]);
-    const [classSaveMessage, setClassSaveMessage] = useState<string | null>(null);
-    const classNameInputRef = useRef<HTMLInputElement>(null);
+    const [showOnboarding, setShowOnboarding] = useState(false);
 
-    // ---------------------------------------------------------
-    // SUSPENSION MODAL
-    // ---------------------------------------------------------
-    const [isSuspendModalOpen, setIsSuspendModalOpen] = useState(false);
-    const [suspensionReason, setSuspensionReason] = useState(
-        'Classes Suspended due to Examination'
+    /* =====================================================
+       ADD CLASS FORM
+       ===================================================== */
+
+    const [newClassName, setNewClassName] = useState('');
+    const [newClassStream, setNewClassStream] = useState('Arts Stream');
+    const [customStreamInput, setCustomStreamInput] = useState('');
+    const [classSaveMessage, setClassSaveMessage] = useState<string | null>(
+        null
     );
 
-    // ---------------------------------------------------------
-    // QUICK LOG STATE
-    // ---------------------------------------------------------
+    const classNameInputRef = useRef<HTMLInputElement>(null);
+
+    /* =====================================================
+       INLINE EDIT
+       ===================================================== */
+
+    const [editingClassId, setEditingClassId] = useState<string | null>(null);
+    const [editClassNameVal, setEditClassNameVal] = useState('');
+    const [editClassStreamVal, setEditClassStreamVal] = useState('');
+
+    const editClassInputRef = useRef<HTMLInputElement>(null);
+
+    /* =====================================================
+       QUICK LOG
+       ===================================================== */
+
     const [selectedTopicId, setSelectedTopicId] = useState('');
     const [topicCovered, setTopicCovered] = useState('');
     const [attendance, setAttendance] = useState('');
-    const [status, setStatus] = useState('Taken');
+
+    const [status, setStatus] = useState<
+        'Taken' | 'Compensated' | 'Cancelled'
+    >('Taken');
+
     const [remarks, setRemarks] = useState('');
 
-    // Dynamic date state
     const [currentDate, setCurrentDate] = useState(() => new Date());
 
-    // ---------------------------------------------------------
-    // LOAD LOCAL DATA
-    // ---------------------------------------------------------
+    /* =====================================================
+       DERIVED LOGS
+       ===================================================== */
+
+    const todayLogs = useMemo(
+        () => (Array.isArray(d.logs) ? d.logs : []) as TodayLog[],
+        [d.logs]
+    );
+
+    /* =====================================================
+       LOAD / REFRESH
+       ===================================================== */
+
     useEffect(() => {
         setMounted(true);
-
-        try {
-            const initialData = load();
-            if (initialData) {
-                setD(initialData);
-            }
-        } catch (err) {
-            console.error('Failed to load ProfPlan local store data:', err);
-            setErrorMessage('Could not load local session data. Please check your storage settings.');
-        }
 
         const refresh = () => {
             try {
                 const updated = load();
+
                 if (updated) {
-                    setD(updated);
+                    const normalized: ProfPlanData = {
+                        ...updated,
+                        classes: sortClassesByHierarchy(
+                            updated.classes || []
+                        ),
+                    };
+
+                    setD(normalized);
                 }
             } catch (err) {
-                console.error('Failed to refresh store data:', err);
+                console.error('Failed to refresh ProfPlan data:', err);
+                setErrorMessage(
+                    'Could not refresh local session data.'
+                );
             }
         };
+
+        try {
+            refresh();
+        } catch (err) {
+            console.error('Failed to load local store data:', err);
+            setErrorMessage(
+                'Could not load local session data. Please check your storage settings.'
+            );
+        }
 
         window.addEventListener('profplan-change', refresh);
         window.addEventListener('storage', refresh);
 
-        const timer = setInterval(() => {
+        const timer = window.setInterval(() => {
             setCurrentDate(new Date());
         }, 60000);
 
         return () => {
             window.removeEventListener('profplan-change', refresh);
             window.removeEventListener('storage', refresh);
-            clearInterval(timer);
+            window.clearInterval(timer);
         };
     }, []);
 
-    // ---------------------------------------------------------
-    // TODAY'S DATE & DAY NORMALIZATION
-    // ---------------------------------------------------------
+    /* =====================================================
+       ESCAPE KEY FOR MODALS
+       ===================================================== */
+
+    useEffect(() => {
+        if (!isAddClassModalOpen && !activeSlot) {
+            return;
+        }
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+
+            if (activeSlot) {
+                setActiveSlot(null);
+                return;
+            }
+
+            if (isAddClassModalOpen) {
+                setIsAddClassModalOpen(false);
+            }
+        };
+
+        window.addEventListener('keydown', handleEscape);
+
+        return () => {
+            window.removeEventListener('keydown', handleEscape);
+        };
+    }, [isAddClassModalOpen, activeSlot]);
+
+    /* =====================================================
+       DATE / DAY
+       ===================================================== */
+
     const todayDateStr = useMemo(() => {
         const year = currentDate.getFullYear();
         const month = String(currentDate.getMonth() + 1).padStart(2, '0');
         const day = String(currentDate.getDate()).padStart(2, '0');
+
         return `${year}-${month}-${day}`;
     }, [currentDate]);
 
-    const dayNumber = currentDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const dayNumber = currentDate.getDay();
 
-    const dayName = useMemo(() => {
-        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        return days[dayNumber];
-    }, [dayNumber]);
+    const dayName = useMemo(
+        () =>
+            [
+                'Sunday',
+                'Monday',
+                'Tuesday',
+                'Wednesday',
+                'Thursday',
+                'Friday',
+                'Saturday',
+            ][dayNumber],
+        [dayNumber]
+    );
 
-    // ---------------------------------------------------------
-    // HOLIDAY
-    // ---------------------------------------------------------
-    const todayHoliday = useMemo(() => {
-        if (!d?.holidays || !Array.isArray(d.holidays)) {
+    /* =====================================================
+       HOLIDAY
+       ===================================================== */
+
+    const todayHoliday = useMemo<TodayHoliday | null>(() => {
+        if (!Array.isArray(d.holidays)) {
             return null;
         }
 
         return (
-            d.holidays.find((h: any) => h.date === todayDateStr) || null
+            (d.holidays.find(
+                (h) => h.date === todayDateStr
+            ) as TodayHoliday) || null
         );
     }, [d.holidays, todayDateStr]);
 
-    // ---------------------------------------------------------
-    // SUSPENSION
-    // ---------------------------------------------------------
-    const existingSuspensionLog = useMemo(() => {
-        if (!d?.logs || !Array.isArray(d.logs)) {
-            return null;
-        }
+    /* =====================================================
+       INSTITUTIONAL NON-INSTRUCTIONAL RECORD
+       -----------------------------------------------------
+       We identify these records by classType/classSource,
+       NOT by remarks text.
+       ===================================================== */
 
+    const existingSuspensionLog = useMemo<TodayLog | null>(() => {
         return (
-            d.logs.find(
-                (l: any) =>
-                    l.date === todayDateStr &&
-                    l.classType === 'Non-Instructional / Suspension'
+            todayLogs.find(
+                (log) =>
+                    log.date === todayDateStr &&
+                    (
+                        log.classType ===
+                            'Non-Instructional / Suspension' ||
+                        log.classSource === 'Institutional Notice'
+                    )
             ) || null
         );
-    }, [d.logs, todayDateStr]);
+    }, [todayLogs, todayDateStr]);
 
-    // ---------------------------------------------------------
-    // FIRST TIME / INCOMPLETE SETUP
-    // ---------------------------------------------------------
-    const isFirstTimeUser = useMemo(() => {
-        return (
-            (!d.classes || d.classes.length === 0) ||
-            (!d.courses || d.courses.length === 0) ||
-            (!d.slots || d.slots.length === 0)
-        );
-    }, [d.classes, d.courses, d.slots]);
+    /* =====================================================
+       SETUP
+       ===================================================== */
 
-    // ---------------------------------------------------------
-    // OPEN ADD CLASS / SEMESTER MODAL
-    // ---------------------------------------------------------
+    const needsSetup = useMemo(() => {
+        return !Array.isArray(d.classes) || d.classes.length === 0;
+    }, [d.classes]);
+
+    const handleProtectedAction = (action: () => void) => {
+        if (needsSetup) {
+            setShowOnboarding(true);
+        } else {
+            action();
+        }
+    };
+
+    /* =====================================================
+       ADD CLASS MODAL
+       -----------------------------------------------------
+       Important: this button can bootstrap the workspace.
+       Therefore it opens even when there are zero classes.
+       ===================================================== */
+
     const openAddClassModal = () => {
         setNewClassName('');
-        setNewClassStream('Arts');
-        setIsCustomStream(false);
-        setNewlyAddedClasses([]);
+        setNewClassStream('Arts Stream');
+        setCustomStreamInput('');
         setClassSaveMessage(null);
+        setEditingClassId(null);
         setErrorMessage(null);
         setIsAddClassModalOpen(true);
 
-        setTimeout(() => {
+        window.setTimeout(() => {
             classNameInputRef.current?.focus();
         }, 100);
     };
 
-    // ---------------------------------------------------------
-    // CLOSE ADD CLASS / SEMESTER MODAL
-    // ---------------------------------------------------------
     const closeAddClassModal = () => {
         setIsAddClassModalOpen(false);
         setNewClassName('');
-        setNewClassStream('Arts');
-        setIsCustomStream(false);
-        setNewlyAddedClasses([]);
+        setNewClassStream('Arts Stream');
+        setCustomStreamInput('');
         setClassSaveMessage(null);
+        setEditingClassId(null);
     };
 
-    // ---------------------------------------------------------
-    // SAVE NEW CLASS / SEMESTER
-    // ---------------------------------------------------------
-    const handleSaveNewClass = (e: React.FormEvent) => {
+    /* =====================================================
+       ADD CLASS
+       ===================================================== */
+
+    const handleSaveNewClass = (
+        e: FormEvent<HTMLFormElement>
+    ) => {
         e.preventDefault();
 
         const className = newClassName.trim();
-        const streamName = newClassStream.trim();
 
-        if (!className || !streamName) {
-            setClassSaveMessage('Please enter the Class / Semester and select or enter a Stream / Faculty / Branch.');
+        const resolvedStream =
+            newClassStream === 'Other / Custom'
+                ? customStreamInput.trim()
+                : newClassStream.trim();
+
+        if (!className) {
+            setErrorMessage('Please enter a Class / Semester name.');
+            return;
+        }
+
+        if (!resolvedStream) {
+            setErrorMessage('Please enter or select a Stream / Faculty.');
             return;
         }
 
         const duplicateExists = (d.classes || []).some(
-            (c: any) =>
-                String(c.name || '').trim().toLowerCase() === className.toLowerCase() &&
-                String(c.stream || '').trim().toLowerCase() === streamName.toLowerCase()
+            (c) =>
+                String(c.name || '')
+                    .trim()
+                    .toLowerCase() === className.toLowerCase() &&
+                String(c.stream || '')
+                    .trim()
+                    .toLowerCase() === resolvedStream.toLowerCase()
         );
 
         if (duplicateExists) {
-            setClassSaveMessage('This Class / Semester with the same Stream / Faculty / Branch is already registered.');
-            setTimeout(() => {
+            setErrorMessage(
+                'This Class / Semester with the same Stream / Faculty is already registered.'
+            );
+            return;
+        }
+
+        try {
+            const newClassObj: ProfPlanData['classes'][number] = {
+                id: createLocalId('cls'),
+                name: className,
+                stream: resolvedStream,
+            };
+
+            const updatedClasses = sortClassesByHierarchy([
+                ...(d.classes || []),
+                newClassObj,
+            ]);
+
+            const updatedData: ProfPlanData = {
+                ...d,
+                classes: updatedClasses,
+            };
+
+            save(updatedData);
+            setD(updatedData);
+
+            setNewClassName('');
+            setNewClassStream('Arts Stream');
+            setCustomStreamInput('');
+            setErrorMessage(null);
+
+            setClassSaveMessage(
+                `✓ Success! "${className}" (${resolvedStream}) has been added and arranged in academic hierarchy.`
+            );
+
+            window.setTimeout(() => {
                 classNameInputRef.current?.focus();
             }, 50);
+        } catch (err) {
+            console.error('Failed to save class:', err);
+            setErrorMessage('Failed to save class to storage.');
+        }
+    };
+
+    /* =====================================================
+       EDIT CLASS
+       ===================================================== */
+
+    const handleStartEditClass = (
+        cls: ProfPlanData['classes'][number]
+    ) => {
+        setEditingClassId(cls.id);
+        setEditClassNameVal(cls.name || '');
+        setEditClassStreamVal(cls.stream || 'Arts Stream');
+
+        window.setTimeout(() => {
+            editClassInputRef.current?.focus();
+        }, 50);
+    };
+
+    const handleSaveEditClass = (clsId: string) => {
+        const trimmedName = editClassNameVal.trim();
+        const trimmedStream = editClassStreamVal.trim();
+
+        if (!trimmedName || !trimmedStream) {
+            setErrorMessage(
+                'Class name and stream cannot be empty.'
+            );
+            return;
+        }
+
+        const duplicateExists = (d.classes || []).some(
+            (c) =>
+                c.id !== clsId &&
+                String(c.name || '')
+                    .trim()
+                    .toLowerCase() === trimmedName.toLowerCase() &&
+                String(c.stream || '')
+                    .trim()
+                    .toLowerCase() === trimmedStream.toLowerCase()
+        );
+
+        if (duplicateExists) {
+            setErrorMessage(
+                'Another academic group already has the same Class / Semester and Stream.'
+            );
             return;
         }
 
         try {
-            const newClassObj = {
-                id: 'cls_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-                name: className,
-                stream: streamName
-            };
-
-            const updatedClasses = [...(d.classes || []), newClassObj];
-            const updatedData = { ...d, classes: updatedClasses };
-
-            save(updatedData);
-            setD(updatedData);
-
-            setNewlyAddedClasses(prev => [...prev, newClassObj]);
-            setNewClassName('');
-            setNewClassStream('Arts');
-            setIsCustomStream(false);
-            setErrorMessage(null);
-
-            setClassSaveMessage(`"${className}" has been added successfully. You can now add the next class / semester.`);
-
-            setTimeout(() => {
-                classNameInputRef.current?.focus();
-            }, 100);
-        } catch (err) {
-            console.error('Error saving new class:', err);
-            setErrorMessage('Failed to save class to storage. Please try again.');
-        }
-    };
-
-    // ---------------------------------------------------------
-    // DELETE CLASS
-    // ---------------------------------------------------------
-    const handleDeleteClass = (clsId: string) => {
-        if (!window.confirm('Delete this class/semester?')) {
-            return;
-        }
-
-        try {
-            const updatedClasses = (d.classes || []).filter((c: any) => c.id !== clsId);
-            const updatedData = { ...d, classes: updatedClasses };
-
-            save(updatedData);
-            setD(updatedData);
-
-            setNewlyAddedClasses(prev => prev.filter(c => c.id !== clsId));
-            setErrorMessage(null);
-            setClassSaveMessage(null);
-        } catch (err) {
-            console.error('Error deleting class:', err);
-            setErrorMessage('Failed to update storage during deletion.');
-        }
-    };
-
-    // ---------------------------------------------------------
-    // TIME HELPER
-    // ---------------------------------------------------------
-    const timeToMinutes = (timeStr: string): number => {
-        if (!timeStr) return 0;
-        const [hours, minutes] = timeStr.trim().split(':').map(Number);
-        return (Number.isFinite(hours) ? hours : 0) * 60 + (Number.isFinite(minutes) ? minutes : 0);
-    };
-
-    // ---------------------------------------------------------
-    // 2. TODAY'S TIMETABLE PERIODS
-    // ---------------------------------------------------------
-    const todaySlots = useMemo(() => {
-        if (!d?.slots || !Array.isArray(d.slots)) {
-            return [];
-        }
-
-        return d.slots
-            .filter((s: any) => {
-                if (s.day === undefined || s.day === null) return false;
-
-                const rawDayStr = String(s.day).trim().toLowerCase();
-                const currentDayLower = dayName.toLowerCase();
-
-                if (rawDayStr === currentDayLower) return true;
-                if (rawDayStr.length >= 3 && currentDayLower.startsWith(rawDayStr.slice(0, 3))) return true;
-
-                const numericDay = Number(s.day);
-                if (!Number.isNaN(numericDay)) {
-                    if (numericDay === dayNumber) return true;
-                    const isoDay = dayNumber === 0 ? 7 : dayNumber;
-                    if (numericDay === isoDay) return true;
+            const updatedClasses = (d.classes || []).map((c) => {
+                if (c.id === clsId) {
+                    return {
+                        ...c,
+                        name: trimmedName,
+                        stream: trimmedStream,
+                    };
                 }
 
-                return false;
-            })
-            .sort((a: any, b: any) => {
-                const startDiff = timeToMinutes(a.start) - timeToMinutes(b.start);
-                if (startDiff !== 0) return startDiff;
-
-                const endDiff = timeToMinutes(a.end) - timeToMinutes(b.end);
-                if (endDiff !== 0) return endDiff;
-
-                return (Number(a.period) || 0) - (Number(b.period) || 0);
+                return c;
             });
-    }, [d.slots, dayName, dayNumber]);
 
-    // ---------------------------------------------------------
-    // EXTRA / UNSCHEDULED CLASSES
-    // ---------------------------------------------------------
-    const todayExtraClasses = useMemo(() => {
-        if (!d?.logs || !Array.isArray(d.logs)) {
-            return [];
-        }
-
-        return d.logs
-            .filter(
-                (l: any) =>
-                    l.date === todayDateStr &&
-                    l.classSource === 'Extra / Unscheduled Class'
-            )
-            .sort(
-                (a: any, b: any) =>
-                    timeToMinutes(a.actualStart || '00:00') -
-                    timeToMinutes(b.actualStart || '00:00')
+            const sortedClasses = sortClassesByHierarchy(
+                updatedClasses
             );
-    }, [d.logs, todayDateStr]);
 
-    // ---------------------------------------------------------
-    // COMPLETED SCHEDULED PERIOD IDs
-    // ---------------------------------------------------------
-    const doneSlotIds = useMemo(() => {
-        if (!d?.logs || !Array.isArray(d.logs)) {
-            return [];
-        }
-
-        return d.logs
-            .filter((l: any) => l.date === todayDateStr && l.slotId)
-            .map((l: any) => l.slotId);
-    }, [d.logs, todayDateStr]);
-
-    // ---------------------------------------------------------
-    // 3. ALL COMPLETED CLASSES TODAY
-    // ---------------------------------------------------------
-    const allCompletedLogsToday = useMemo(() => {
-        if (!d?.logs || !Array.isArray(d.logs)) return [];
-        return d.logs.filter(
-            (l: any) =>
-                l.date === todayDateStr &&
-                (l.status === 'Taken' || l.status === 'Compensated')
-        );
-    }, [d.logs, todayDateStr]);
-
-    const totalClassesCompletedCount = allCompletedLogsToday.length;
-
-    // ---------------------------------------------------------
-    // TODAY'S DELIVERED HOURS
-    // ---------------------------------------------------------
-    const todayDeliveredHours = useMemo(() => {
-        const sum = allCompletedLogsToday.reduce(
-            (acc: number, curr: any) => acc + (Number(curr.hours) || 0),
-            0
-        );
-        return sum.toFixed(2);
-    }, [allCompletedLogsToday]);
-
-    // ---------------------------------------------------------
-    // DAILY COMPLETION RATE
-    // ---------------------------------------------------------
-    const completionRate = useMemo(() => {
-        if (todaySlots.length > 0) {
-            return Math.min(100, Math.round((doneSlotIds.length / todaySlots.length) * 100));
-        }
-        return totalClassesCompletedCount > 0 ? 100 : 0;
-    }, [todaySlots.length, doneSlotIds.length, totalClassesCompletedCount]);
-
-    const getCourse = (id: string) =>
-        (d.courses || []).find((c: any) => c.id === id);
-
-    const getCourseTopics = (courseId: string) =>
-        (d.topics || []).filter((t: any) => t.courseId === courseId);
-
-    // ---------------------------------------------------------
-    // RECORD NON-INSTRUCTIONAL DAY
-    // ---------------------------------------------------------
-    const handleRecordNonInstructionalDay = (reasonText: string) => {
-        try {
-            const fallbackCourse = (d.courses || [])[0];
-            const dummyCourseId = fallbackCourse ? fallbackCourse.id : 'general_course_placeholder';
-
-            const logEntry: any = {
-                id: 'log_suspension_' + Date.now(),
-                date: todayDateStr,
-                courseId: dummyCourseId,
-                slotId: '',
-                topicId: '',
-                plannedTopicName: reasonText,
-                covered: reasonText,
-                status: 'Leave',
-                classSource: 'Institutional Notice',
-                classType: 'Non-Instructional / Suspension',
-                hours: 0,
-                attendance: undefined,
-                room: 'All Campus',
-                semester: 'All Semesters',
-                remarks: 'Recorded via Today Dashboard'
+            const updatedData: ProfPlanData = {
+                ...d,
+                classes: sortedClasses,
             };
 
-            const updatedLogs = [
-                ...(d.logs || [])
-            ].filter(
-                (l: any) =>
-                    !(
-                        l.date === todayDateStr &&
-                        l.classType === 'Non-Instructional / Suspension'
+            save(updatedData);
+            setD(updatedData);
+
+            setEditingClassId(null);
+            setErrorMessage(null);
+            setClassSaveMessage(
+                `✓ Successfully updated "${trimmedName}".`
+            );
+        } catch (err) {
+            console.error('Error updating class:', err);
+            setErrorMessage(
+                'Failed to update class details.'
+            );
+        }
+    };
+
+    /* =====================================================
+       DELETE CLASS
+       -----------------------------------------------------
+       IMPORTANT:
+       Deleting a ClassItem alone leaves orphaned records.
+
+       We therefore remove dependent:
+       - courses
+       - units
+       - topics
+       - timetable slots
+       - logs
+
+       This remains entirely inside TodayPage.
+       ===================================================== */
+
+    const handleDeleteClass = (clsId: string) => {
+        const classToDelete = (d.classes || []).find(
+            (c) => c.id === clsId
+        );
+
+        if (!classToDelete) return;
+
+        const confirmed = window.confirm(
+            `Delete "${classToDelete.name}"${
+                classToDelete.stream
+                    ? ` (${classToDelete.stream})`
+                    : ''
+            }?\n\nThis will also remove its linked subjects, syllabus topics, timetable periods and progress logs.`
+        );
+
+        if (!confirmed) return;
+
+        try {
+            const relatedCourseIds = new Set(
+                (d.courses || [])
+                    .filter(
+                        (course) =>
+                            course.classId === clsId
                     )
+                    .map((course) => course.id)
+            );
+
+            const relatedUnitIds = new Set(
+                (d.units || [])
+                    .filter((unit) =>
+                        relatedCourseIds.has(unit.courseId)
+                    )
+                    .map((unit) => unit.id)
+            );
+
+            const updatedCourses = (d.courses || []).filter(
+                (course) =>
+                    course.classId !== clsId
+            );
+
+            const updatedUnits = (d.units || []).filter(
+                (unit) =>
+                    !relatedCourseIds.has(unit.courseId)
+            );
+
+            const updatedTopics = (d.topics || []).filter(
+                (topic) =>
+                    !relatedCourseIds.has(topic.courseId || '') &&
+                    !relatedUnitIds.has(topic.unitId)
+            );
+
+            const updatedSlots = (d.slots || []).filter(
+                (slot) =>
+                    slot.classId !== clsId &&
+                    !relatedCourseIds.has(slot.courseId)
+            );
+
+            const updatedLogs = (d.logs || []).filter(
+                (log) =>
+                    log.classId !== clsId &&
+                    !relatedCourseIds.has(log.courseId)
+            );
+
+            const updatedClasses = sortClassesByHierarchy(
+                (d.classes || []).filter(
+                    (c) => c.id !== clsId
+                )
+            );
+
+            const updatedData: ProfPlanData = {
+                ...d,
+                classes: updatedClasses,
+                courses: updatedCourses,
+                units: updatedUnits,
+                topics: updatedTopics,
+                slots: updatedSlots,
+                logs: updatedLogs,
+            };
+
+            save(updatedData);
+            setD(updatedData);
+
+            setEditingClassId(null);
+            setClassSaveMessage(
+                `"${classToDelete.name}" and its linked academic records were removed.`
+            );
+            setErrorMessage(null);
+        } catch (err) {
+            console.error(
+                'Failed to delete class and dependencies:',
+                err
+            );
+
+            setErrorMessage(
+                'Failed to update storage during deletion.'
+            );
+        }
+    };
+
+    /* =====================================================
+       TODAY'S TIMETABLE
+       ===================================================== */
+
+    const todaySlots = useMemo<TodaySlot[]>(() => {
+        if (!Array.isArray(d.slots)) {
+            return [];
+        }
+
+        const currentDayLower = dayName.toLowerCase();
+
+        return (d.slots as TodaySlot[])
+            .filter((slot) => {
+                if (!slot.day) return false;
+
+                const rawDay = String(slot.day)
+                    .trim()
+                    .toLowerCase();
+
+                if (rawDay === currentDayLower) {
+                    return true;
+                }
+
+                /*
+                 * Legacy / flexible data support.
+                 * Only accept standard 3-character weekday prefixes.
+                 */
+                const knownPrefixes = new Set([
+                    'sun',
+                    'mon',
+                    'tue',
+                    'wed',
+                    'thu',
+                    'fri',
+                    'sat',
+                ]);
+
+                const prefix = rawDay.slice(0, 3);
+
+                return (
+                    rawDay.length >= 3 &&
+                    knownPrefixes.has(prefix) &&
+                    currentDayLower.startsWith(prefix)
+                );
+            })
+            .sort(
+                (a, b) =>
+                    timeToMinutes(a.start) -
+                    timeToMinutes(b.start)
+            );
+    }, [d.slots, dayName]);
+
+    /* =====================================================
+       EXTRA CLASSES
+       ===================================================== */
+
+    const todayExtraClasses = useMemo(
+        () =>
+            todayLogs
+                .filter(
+                    (log) =>
+                        log.date === todayDateStr &&
+                        log.classSource ===
+                            'Extra / Unscheduled Class'
+                )
+                .sort(
+                    (a, b) =>
+                        timeToMinutes(a.actualStart) -
+                        timeToMinutes(b.actualStart)
+                ),
+        [todayLogs, todayDateStr]
+    );
+
+    /* =====================================================
+       TODAY COMPLETION
+       ===================================================== */
+
+    const completedTodayLogs = useMemo(
+        () =>
+            todayLogs.filter(
+                (log) =>
+                    log.date === todayDateStr &&
+                    isTeachingCompleted(log)
+            ),
+        [todayLogs, todayDateStr]
+    );
+
+    const completedScheduledSlotIds = useMemo(
+        () =>
+            new Set(
+                todayLogs
+                    .filter(
+                        (log) =>
+                            log.date === todayDateStr &&
+                            !!log.slotId &&
+                            isTeachingCompleted(log)
+                    )
+                    .map((log) => log.slotId as string)
+            ),
+        [todayLogs, todayDateStr]
+    );
+
+    const totalClassesCompletedCount =
+        completedTodayLogs.length;
+
+    const todayDeliveredHours = completedTodayLogs
+        .reduce(
+            (total, log) =>
+                total + (Number(log.hours) || 0),
+            0
+        )
+        .toFixed(2);
+
+    const completionRate =
+        todaySlots.length > 0
+            ? Math.min(
+                  100,
+                  Math.round(
+                      (completedScheduledSlotIds.size /
+                          todaySlots.length) *
+                          100
+                  )
+              )
+            : totalClassesCompletedCount > 0
+            ? 100
+            : 0;
+
+    /* =====================================================
+       COURSE / TOPIC HELPERS
+       ===================================================== */
+
+    const getCourse = (id: string) =>
+        (d.courses || []).find(
+            (course) => course.id === id
+        );
+
+    const getCourseTopics = (courseId: string) =>
+        (d.topics || []).filter(
+            (topic) => topic.courseId === courseId
+        );
+
+    /* =====================================================
+       RECORD HOLIDAY / SUSPENSION
+       -----------------------------------------------------
+       We do NOT attach the record to a real course.
+
+       The placeholder remains compatible with the existing
+       Log type without changing types.ts.
+       ===================================================== */
+
+    const handleRecordNonInstructionalDay = (
+        reasonText: string
+    ) => {
+        const cleanedReason = reasonText.trim();
+
+        if (!cleanedReason) {
+            setErrorMessage(
+                'A holiday or suspension reason is required.'
+            );
+            return;
+        }
+
+        try {
+            const existing = todayLogs.filter(
+                (log) =>
+                    log.date === todayDateStr &&
+                    (
+                        log.classType ===
+                            'Non-Instructional / Suspension' ||
+                        log.classSource ===
+                            'Institutional Notice'
+                    )
+            );
+
+            const logEntry: TodayLog = {
+                id: createLocalId('log_institutional'),
+                date: todayDateStr,
+
+                /*
+                 * Never borrow a genuine course ID for a
+                 * non-instructional day.
+                 */
+                courseId: 'general_course_placeholder',
+
+                status: 'cancelled',
+                hours: 0,
+                remarks: cleanedReason,
+                classType:
+                    'Non-Instructional / Suspension',
+                classSource: 'Institutional Notice',
+                type: 'Non-Instructional Day',
+            };
+
+            const existingIds = new Set(
+                existing.map((log) => log.id)
+            );
+
+            const updatedLogs = todayLogs.filter(
+                (log) => !existingIds.has(log.id)
             );
 
             updatedLogs.push(logEntry);
 
-            const updatedData = { ...d, logs: updatedLogs };
+            const updatedData: ProfPlanData = {
+                ...d,
+                logs: updatedLogs as Log[],
+            };
+
             save(updatedData);
             setD(updatedData);
-            setIsSuspendModalOpen(false);
             setErrorMessage(null);
         } catch (err) {
-            console.error('Failed to record suspension/holiday status:', err);
-            setErrorMessage('Failed to save suspension record. Storage quota or format error.');
+            console.error(
+                'Failed to save institutional day:',
+                err
+            );
+
+            setErrorMessage(
+                'Failed to save holiday / suspension record.'
+            );
         }
     };
 
-    // ---------------------------------------------------------
-    // REMOVE SUSPENSION
-    // ---------------------------------------------------------
+    /* =====================================================
+       REMOVE HOLIDAY / SUSPENSION RECORD
+       ===================================================== */
+
     const handleRemoveSuspensionLog = () => {
         if (!existingSuspensionLog) return;
 
-        if (!window.confirm('Remove this holiday/suspension status from today’s register?')) {
-            return;
-        }
+        const confirmed = window.confirm(
+            'Remove this holiday/suspension status from today’s register?'
+        );
+
+        if (!confirmed) return;
 
         try {
-            const updatedLogs = (d.logs || []).filter(
-                (l: any) => l.id !== existingSuspensionLog.id
+            const updatedLogs = todayLogs.filter(
+                (log) =>
+                    log.id !==
+                    existingSuspensionLog.id
             );
 
-            const updatedData = { ...d, logs: updatedLogs };
+            const updatedData: ProfPlanData = {
+                ...d,
+                logs: updatedLogs as Log[],
+            };
+
             save(updatedData);
             setD(updatedData);
             setErrorMessage(null);
         } catch (err) {
-            console.error('Failed to remove suspension status:', err);
-            setErrorMessage('Failed to update storage during removal.');
+            console.error(
+                'Failed to remove institutional record:',
+                err
+            );
+
+            setErrorMessage(
+                'Failed to update storage during removal.'
+            );
         }
     };
 
-    // ---------------------------------------------------------
-    // OPEN QUICK LOG
-    // ---------------------------------------------------------
-    const handleOpenQuickLog = (slot: any) => {
-        const courseTopics = getCourseTopics(slot.courseId);
+    /* =====================================================
+       QUICK LOG OPEN
+       ===================================================== */
+
+    const handleOpenQuickLog = (
+        slot: TodaySlot
+    ) => {
+        const courseTopics = getCourseTopics(
+            slot.courseId
+        );
+
         const defaultTopic = courseTopics[0];
 
         setActiveSlot(slot);
-        setSelectedTopicId(defaultTopic?.id || '');
-        setTopicCovered(defaultTopic?.name || defaultTopic?.title || '');
+
+        setSelectedTopicId(
+            defaultTopic?.id || ''
+        );
+
+        setTopicCovered(
+            defaultTopic?.name ||
+                defaultTopic?.title ||
+                ''
+        );
+
         setAttendance('');
         setStatus('Taken');
         setRemarks('');
         setErrorMessage(null);
     };
 
-    // ---------------------------------------------------------
-    // TOPIC DROPDOWN
-    // ---------------------------------------------------------
-    const handleTopicDropdownChange = (topicId: string) => {
+    /* =====================================================
+       TOPIC CHANGE
+       ===================================================== */
+
+    const handleTopicDropdownChange = (
+        topicId: string
+    ) => {
         setSelectedTopicId(topicId);
-        const chosen = (d.topics || []).find((t: any) => t.id === topicId);
+
+        const chosen = (d.topics || []).find(
+            (topic) => topic.id === topicId
+        );
+
         if (chosen) {
-            setTopicCovered(chosen.name || chosen.title || '');
+            setTopicCovered(
+                chosen.name ||
+                    chosen.title ||
+                    ''
+            );
+        } else {
+            setTopicCovered('');
         }
     };
 
-    // ---------------------------------------------------------
-    // SAVE QUICK LOG
-    // ---------------------------------------------------------
-    const handleSaveQuickLog = (e: React.FormEvent) => {
+    /* =====================================================
+       QUICK LOG SAVE
+       ===================================================== */
+
+    const handleSaveQuickLog = (
+        e: FormEvent<HTMLFormElement>
+    ) => {
         e.preventDefault();
+
         if (!activeSlot) return;
 
-        try {
-            const diff =
-                timeToMinutes(activeSlot.end) - timeToMinutes(activeSlot.start);
+        const typedTopic = topicCovered.trim();
 
-            const calculatedHours =
-                diff > 0 ? Number((diff / 60).toFixed(2)) : 0.75;
+        if (!typedTopic) {
+            setErrorMessage(
+                'Please enter the topic actually covered.'
+            );
+            return;
+        }
 
-            const plannedTopicObj = (d.topics || []).find(
-                (t: any) => t.id === selectedTopicId
+        /* ---------------------------------------------
+           Attendance validation
+           --------------------------------------------- */
+
+        let attendanceValue: number | undefined;
+
+        if (attendance.trim() !== '') {
+            const parsedAttendance = Number(
+                attendance
             );
 
-            const typedTopic = topicCovered.trim();
+            if (
+                !Number.isInteger(
+                    parsedAttendance
+                ) ||
+                parsedAttendance < 0 ||
+                parsedAttendance > 200
+            ) {
+                setErrorMessage(
+                    'Attendance must be a whole number between 0 and 200.'
+                );
+                return;
+            }
+
+            attendanceValue =
+                parsedAttendance;
+        }
+
+        try {
+            const startMinutes =
+                timeToMinutes(
+                    activeSlot.start
+                );
+
+            const endMinutes =
+                timeToMinutes(
+                    activeSlot.end
+                );
+
+            const diff =
+                endMinutes -
+                startMinutes;
+
+            const calculatedHours =
+                Number.isFinite(diff) &&
+                diff > 0
+                    ? Number(
+                          (
+                              diff / 60
+                          ).toFixed(2)
+                      )
+                    : 0.75;
+
+            const plannedTopicObj =
+                (d.topics || []).find(
+                    (topic) =>
+                        topic.id ===
+                        selectedTopicId
+                );
+
             const resolvedPlannedName =
                 plannedTopicObj?.name ||
                 plannedTopicObj?.title ||
-                (typedTopic ? typedTopic : 'General / Unplanned');
+                'General / Unplanned';
 
-            const resolvedCovered = typedTopic || resolvedPlannedName;
+            const resolvedCovered =
+                typedTopic ||
+                resolvedPlannedName;
 
-            const newLog: any = {
-                id: 'log_' + Date.now(),
+            const canonicalStatus: TodayLog['status'] =
+                status === 'Taken'
+                    ? 'completed'
+                    : status ===
+                      'Compensated'
+                    ? 'partial'
+                    : 'cancelled';
+
+            const newLog: TodayLog = {
+                id: createLocalId('log'),
+
                 date: todayDateStr,
+
                 slotId: activeSlot.id,
-                courseId: activeSlot.courseId,
-                topicId: selectedTopicId || '',
-                plannedTopicName: resolvedPlannedName,
-                status: status as any,
-                classSource: 'Scheduled Class',
-                type: 'Regular Lecture',
-                actualStart: activeSlot.start,
-                actualEnd: activeSlot.end,
-                covered: resolvedCovered,
-                hours: calculatedHours,
-                attendance: attendance ? Number(attendance) : undefined,
-                remarks: remarks.trim()
+
+                courseId:
+                    activeSlot.courseId,
+
+                topicId:
+                    selectedTopicId || '',
+
+                plannedTopicName:
+                    resolvedPlannedName,
+
+                status: canonicalStatus,
+
+                classSource:
+                    'Scheduled Class',
+
+                type:
+                    'Regular Lecture',
+
+                actualStart:
+                    activeSlot.start,
+
+                actualEnd:
+                    activeSlot.end,
+
+                covered:
+                    resolvedCovered,
+
+                hours:
+                    calculatedHours,
+
+                attendance:
+                    attendanceValue,
+
+                remarks:
+                    remarks.trim(),
+
+                legacyStatus:
+                    status,
             };
 
-            const updatedLogs = [
-                ...(d.logs || [])
-            ].filter(
-                (l: any) =>
-                    !(l.date === todayDateStr && l.slotId === activeSlot.id)
+            /*
+             * One scheduled period should have one active
+             * quick-log record for the current date.
+             */
+            const updatedLogs = todayLogs.filter(
+                (log) =>
+                    !(
+                        log.date ===
+                            todayDateStr &&
+                        log.slotId ===
+                            activeSlot.id
+                    )
             );
 
             updatedLogs.push(newLog);
 
-            const updatedData = { ...d, logs: updatedLogs };
+            const updatedData: ProfPlanData = {
+                ...d,
+                logs: updatedLogs as Log[],
+            };
+
             save(updatedData);
             setD(updatedData);
+
             setActiveSlot(null);
             setErrorMessage(null);
         } catch (err) {
-            console.error('Failed to save quick log:', err);
-            setErrorMessage('Failed to save progress log. Please check your inputs or storage quota.');
+            console.error(
+                'Failed to save quick log:',
+                err
+            );
+
+            setErrorMessage(
+                'Failed to save progress log.'
+            );
         }
     };
 
-    // ---------------------------------------------------------
-    // UNDO LOG
-    // ---------------------------------------------------------
-    const handleUndoLog = (slotId: string) => {
+    /* =====================================================
+       UNDO LOG
+       ===================================================== */
+
+    const handleUndoLog = (
+        slotId: string
+    ) => {
+        const existingLog = todayLogs.find(
+            (log) =>
+                log.date ===
+                    todayDateStr &&
+                log.slotId === slotId
+        );
+
+        if (!existingLog) return;
+
         const confirmed = window.confirm(
             'Re-open this teaching period? The existing progress log will be removed.'
         );
+
         if (!confirmed) return;
 
         try {
-            const updatedLogs = (d.logs || []).filter(
-                (l: any) => !(l.date === todayDateStr && l.slotId === slotId)
+            /*
+             * Remove only the relevant scheduled log.
+             * This avoids deleting unrelated records.
+             */
+            const updatedLogs = todayLogs.filter(
+                (log) =>
+                    log.id !== existingLog.id
             );
 
-            const updatedData = { ...d, logs: updatedLogs };
+            const updatedData: ProfPlanData = {
+                ...d,
+                logs: updatedLogs as Log[],
+            };
+
             save(updatedData);
             setD(updatedData);
             setErrorMessage(null);
         } catch (err) {
-            console.error('Failed to undo log entry:', err);
-            setErrorMessage('Failed to update storage during undo action.');
+            console.error(
+                'Failed to undo log:',
+                err
+            );
+
+            setErrorMessage(
+                'Failed to update storage during undo action.'
+            );
         }
     };
+
+    /* =====================================================
+       MOUNT GUARD
+       ===================================================== */
 
     if (!mounted) {
         return (
             <div className="flex min-h-[50vh] items-center justify-center">
                 <div className="text-sm font-bold text-slate-500 animate-pulse">
-                    Loading ProfPlan Dashboard...
+                    Loading Today Dashboard...
                 </div>
             </div>
         );
@@ -617,15 +1380,57 @@ export default function TodayPage() {
     return (
         <div className="space-y-6 pb-16 max-w-7xl mx-auto px-4 sm:px-6">
 
-            {/* ERROR NOTIFICATION */}
+            {/* =================================================
+                ONBOARDING
+               ================================================= */}
+
+            {showOnboarding && (
+                <OnboardingModal
+                    onComplete={() => {
+                        setShowOnboarding(false);
+
+                        try {
+                            const refreshed =
+                                load();
+
+                            if (refreshed) {
+                                setD({
+                                    ...refreshed,
+                                    classes:
+                                        sortClassesByHierarchy(
+                                            refreshed.classes ||
+                                                []
+                                        ),
+                                });
+                            }
+                        } catch (err) {
+                            console.error(
+                                'Failed to refresh after onboarding:',
+                                err
+                            );
+                        }
+                    }}
+                />
+            )}
+
+            {/* =================================================
+                ERROR BANNER
+               ================================================= */}
+
             {errorMessage && (
-                <div className="p-4 bg-rose-50 border-2 border-rose-300 rounded-2xl text-xs text-rose-900 flex items-center justify-between shadow-sm animate-in fade-in">
-                    <div className="flex items-center gap-2.5">
-                        <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
-                        <span className="font-bold">{errorMessage}</span>
-                    </div>
+                <div
+                    role="alert"
+                    className="p-4 bg-rose-50 border-2 border-rose-300 rounded-2xl text-xs text-rose-900 flex items-center justify-between shadow-sm"
+                >
+                    <span className="font-bold">
+                        {errorMessage}
+                    </span>
+
                     <button
-                        onClick={() => setErrorMessage(null)}
+                        type="button"
+                        onClick={() =>
+                            setErrorMessage(null)
+                        }
                         className="text-rose-700 font-extrabold hover:underline"
                     >
                         Dismiss
@@ -633,14 +1438,19 @@ export default function TodayPage() {
                 </div>
             )}
 
-            {/* HERO BANNER */}
+            {/* =================================================
+                HERO BANNER
+               ================================================= */}
+
             <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 p-6 md:p-8 text-white shadow-xl">
                 <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+
                     <div className="flex items-center gap-4">
+
                         <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-white p-1 shadow-lg ring-2 ring-white/30 hidden sm:block">
                             <Image
                                 src="/apnsir-logo.png"
-                                alt="APNSIR FOUNDATION"
+                                alt="APNSIR Foundation"
                                 width={56}
                                 height={56}
                                 className="h-full w-full object-contain rounded-full"
@@ -649,395 +1459,61 @@ export default function TodayPage() {
                         </div>
 
                         <div>
-                            <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-1 text-xs font-bold tracking-wide text-white backdrop-blur-sm">
+                            <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-1 text-xs font-bold text-white backdrop-blur-sm">
                                 <Sparkles className="w-3.5 h-3.5 text-white" />
                                 An Initiative by APNSIR FOUNDATION
                             </div>
 
-                            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white mt-0.5">
+                            <h1 className="text-2xl md:text-3xl font-black text-white mt-0.5">
                                 Today&apos;s Class Schedule
                             </h1>
 
                             <p className="text-xs md:text-sm text-blue-100/90 mt-1 flex items-center gap-1.5 font-medium">
                                 <Calendar className="w-3.5 h-3.5 text-blue-300" />
-                                {currentDate.toLocaleDateString('en-IN', {
-                                    weekday: 'long',
-                                    day: 'numeric',
-                                    month: 'long',
-                                    year: 'numeric'
-                                })}
-                                <span className="text-blue-300 mx-1">·</span>
+
+                                {currentDate.toLocaleDateString(
+                                    'en-IN',
+                                    {
+                                        weekday:
+                                            'long',
+                                        day:
+                                            'numeric',
+                                        month:
+                                            'long',
+                                        year:
+                                            'numeric',
+                                    }
+                                )}
+
+                                <span className="text-blue-300 mx-1">
+                                    ·
+                                </span>
+
                                 Daily Teaching Routine &amp; Progress Register
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2.5">
-                        <button
-                            type="button"
-                            onClick={() => setIsDataHubOpen(true)}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-md text-white font-extrabold text-xs shadow-md transition transform active:scale-95"
-                        >
-                            <ShieldCheck className="w-4 h-4 text-emerald-300" />
-                            Backup &amp; Export Hub
-                        </button>
-                    </div>
+                    <button
+                        type="button"
+                        onClick={() =>
+                            setIsDataHubOpen(true)
+                        }
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-extrabold text-xs shadow-md transition"
+                    >
+                        <ShieldCheck className="w-4 h-4 text-emerald-300" />
+                        Backup &amp; Export Hub
+                    </button>
                 </div>
             </section>
 
-            {/* FIRST-TIME SETUP CALLOUT */}
-            {isFirstTimeUser && (
-                <div className="rounded-3xl border-2 border-blue-600/40 bg-gradient-to-br from-blue-50 via-indigo-50/60 to-white p-6 md:p-7 shadow-md animate-in fade-in zoom-in-95">
-                    <div className="flex items-center gap-2 mb-2">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600 text-white font-black text-sm shadow">
-                            🚀
-                        </span>
-                        <h2 className="text-base md:text-lg font-black text-blue-950">
-                            Welcome to ProfPlan! Let&apos;s set up your teaching workspace
-                        </h2>
-                    </div>
+            {/* =================================================
+                ACTION BUTTONS
+               ================================================= */}
 
-                    <p className="text-xs text-slate-600 mb-4 max-w-2xl font-medium">
-                        Start by adding the classes/semesters you teach. Then add your subjects and set your weekly timetable.
-                    </p>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                        <button
-                            type="button"
-                            onClick={openAddClassModal}
-                            className="flex items-center justify-between p-4 bg-white rounded-2xl border-2 border-blue-200 hover:border-blue-600 hover:shadow-md transition group text-left w-full"
-                        >
-                            <div className="flex items-center gap-3.5">
-                                <div className="p-3 bg-blue-100 text-blue-800 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
-                                    <Layers className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-black text-slate-900">
-                                        Step 1: Add Classes / Semesters
-                                    </h3>
-                                    <p className="text-[11px] text-slate-500 font-medium">
-                                        e.g. BA 1st Semester, +2 1st Year, Class XI
-                                    </p>
-                                </div>
-                            </div>
-                            <Plus className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition" />
-                        </button>
-
-                        <Link
-                            href="/syllabus"
-                            className="flex items-center justify-between p-4 bg-white rounded-2xl border-2 border-indigo-200 hover:border-indigo-600 hover:shadow-md transition group"
-                        >
-                            <div className="flex items-center gap-3.5">
-                                <div className="p-3 bg-indigo-100 text-indigo-800 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition">
-                                    <GraduationCap className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-black text-slate-900">
-                                        Step 2: Add Subjects &amp; Units
-                                    </h3>
-                                    <p className="text-[11px] text-slate-500 font-medium">
-                                        Add subjects and organise their syllabus units
-                                    </p>
-                                </div>
-                            </div>
-                            <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition" />
-                        </Link>
-
-                        <Link
-                            href="/timetable"
-                            className="flex items-center justify-between p-4 bg-white rounded-2xl border-2 border-purple-200 hover:border-purple-600 hover:shadow-md transition group"
-                        >
-                            <div className="flex items-center gap-3.5">
-                                <div className="p-3 bg-purple-100 text-purple-800 rounded-xl group-hover:bg-purple-600 group-hover:text-white transition">
-                                    <CalendarDays className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-black text-slate-900">
-                                        Step 3: Set Weekly Timetable
-                                    </h3>
-                                    <p className="text-[11px] text-slate-500 font-medium">
-                                        Assign subjects to periods &amp; rooms
-                                    </p>
-                                </div>
-                            </div>
-                            <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-purple-600 group-hover:translate-x-1 transition" />
-                        </Link>
-                    </div>
-
-                    {d.classes && d.classes.length > 0 && (
-                        <div className="mt-4 pt-3 border-t border-blue-100 flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-bold text-slate-500">
-                                Configured Classes:
-                            </span>
-
-                            {d.classes.map((cls: any) => (
-                                <span
-                                    key={cls.id}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-100 text-blue-900 font-extrabold text-xs"
-                                >
-                                    {cls.name} ({cls.stream})
-                                    <button
-                                        type="button"
-                                        onClick={() => handleDeleteClass(cls.id)}
-                                        className="text-blue-500 hover:text-rose-600"
-                                        title="Delete class/semester"
-                                    >
-                                        <X className="w-3 h-3" />
-                                    </button>
-                                </span>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* MODAL: ADD CLASSES / SEMESTERS */}
-            {isAddClassModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-                    <div className="w-full max-w-lg max-h-[92vh] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col">
-                        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 shrink-0">
-                            <div className="flex items-center gap-3">
-                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-md">
-                                    <Layers className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-black text-slate-900">
-                                        Add Classes / Semesters
-                                    </h3>
-                                    <p className="text-xs text-slate-500 font-medium">
-                                        Register all the academic groups you teach
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={closeAddClassModal}
-                                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition"
-                                title="Close"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        <div className="overflow-y-auto px-6 py-5 space-y-4">
-                            <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
-                                        <Plus className="w-4 h-4" />
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-black text-blue-950">
-                                            Add all your classes in one session
-                                        </p>
-                                        <p className="text-[11px] text-blue-800/80 font-medium mt-0.5 leading-relaxed">
-                                            You can add 5–7 or more classes/semesters without closing this window. After each save, simply enter the next one.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5">
-                                <div className="flex items-center gap-2">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                                    <span className="text-xs font-bold text-slate-700">
-                                        Added in this session
-                                    </span>
-                                </div>
-                                <span className="inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-lg bg-blue-600 text-white text-xs font-black">
-                                    {newlyAddedClasses.length}
-                                </span>
-                            </div>
-
-                            {classSaveMessage && (
-                                <div className="flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-xs text-emerald-800">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                    <span className="font-bold leading-relaxed">{classSaveMessage}</span>
-                                </div>
-                            )}
-
-                            <form onSubmit={handleSaveNewClass} className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                                        Class / Semester <span className="text-rose-500">*</span>
-                                    </label>
-                                    <input
-                                        ref={classNameInputRef}
-                                        type="text"
-                                        placeholder="e.g. BA 1st Semester, +2 1st Year Arts, Class XI"
-                                        value={newClassName}
-                                        onChange={(e) => {
-                                            setNewClassName(e.target.value);
-                                            setClassSaveMessage(null);
-                                        }}
-                                        required
-                                        className="w-full px-3.5 py-3 text-sm rounded-xl border border-slate-300 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                                        Stream / Faculty / Branch <span className="text-rose-500">*</span>
-                                    </label>
-                                    <select
-                                        value={isCustomStream ? 'Other' : newClassStream}
-                                        onChange={(e) => {
-                                            const value = e.target.value;
-                                            setClassSaveMessage(null);
-                                            if (value === 'Other') {
-                                                setIsCustomStream(true);
-                                                setNewClassStream('');
-                                            } else {
-                                                setIsCustomStream(false);
-                                                setNewClassStream(value);
-                                            }
-                                        }}
-                                        className="w-full px-3.5 py-3 text-sm rounded-xl border border-slate-300 bg-white font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-                                    >
-                                        <option value="">Select Stream / Faculty / Branch</option>
-                                        <option value="Arts">Arts</option>
-                                        <option value="Science">Science</option>
-                                        <option value="Commerce">Commerce</option>
-                                        <option value="Vocational">Vocational</option>
-                                        <option value="B.Tech">B.Tech</option>
-                                        <option value="Medicine">Medicine</option>
-                                        <option value="Other">+ Add Stream / Faculty / Branch</option>
-                                    </select>
-
-                                    {isCustomStream && (
-                                        <div className="mt-2">
-                                            <input
-                                                type="text"
-                                                value={newClassStream}
-                                                onChange={(e) => setNewClassStream(e.target.value)}
-                                                placeholder="Enter Stream / Faculty / Branch"
-                                                required
-                                                autoFocus
-                                                className="w-full px-3.5 py-3 text-sm rounded-xl border border-blue-300 bg-blue-50 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setIsCustomStream(false);
-                                                    setNewClassStream('Arts');
-                                                    setClassSaveMessage(null);
-                                                }}
-                                                className="mt-1.5 text-[11px] font-bold text-blue-700 hover:underline"
-                                            >
-                                                ← Choose from standard options
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <button
-                                    type="submit"
-                                    className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md hover:shadow-lg transition transform active:scale-[0.99]"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    Save &amp; Add More Classes / Semesters
-                                </button>
-                            </form>
-
-                            {newlyAddedClasses.length > 0 && (
-                                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 overflow-hidden">
-                                    <div className="px-4 py-3 border-b border-emerald-200 flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                                            <span className="text-xs font-black text-emerald-900">
-                                                Added in This Session
-                                            </span>
-                                        </div>
-                                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700">
-                                            {newlyAddedClasses.length} {newlyAddedClasses.length === 1 ? 'Entry' : 'Entries'}
-                                        </span>
-                                    </div>
-                                    <div className="p-3 space-y-1.5">
-                                        {newlyAddedClasses.map((c: any, index: number) => (
-                                            <div
-                                                key={c.id}
-                                                className="flex items-center justify-between gap-3 bg-white border border-emerald-100 rounded-xl px-3 py-2"
-                                            >
-                                                <div className="flex items-center gap-2.5 min-w-0">
-                                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 text-[10px] font-black">
-                                                        {index + 1}
-                                                    </span>
-                                                    <div className="min-w-0">
-                                                        <p className="text-xs font-black text-slate-900 truncate">{c.name}</p>
-                                                        <p className="text-[10px] font-medium text-slate-500 truncate">{c.stream}</p>
-                                                    </div>
-                                                </div>
-                                                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {d.classes && d.classes.length > 0 && (
-                                <div className="space-y-2 pt-1">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                                            All Registered Classes / Semesters
-                                        </span>
-                                        <span className="text-[10px] font-bold text-slate-400">
-                                            {d.classes.length} total
-                                        </span>
-                                    </div>
-                                    <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
-                                        {d.classes.map((c: any) => (
-                                            <div
-                                                key={c.id}
-                                                className="flex items-center justify-between gap-3 p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs font-bold text-slate-800"
-                                            >
-                                                <div className="min-w-0">
-                                                    <p className="font-black truncate">{c.name}</p>
-                                                    <p className="text-[10px] text-slate-400 font-normal truncate">{c.stream}</p>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleDeleteClass(c.id)}
-                                                    className="text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg shrink-0 transition"
-                                                    title="Delete class/semester"
-                                                >
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/80 shrink-0">
-                            <div className="text-[11px] text-slate-500 font-medium">
-                                {newlyAddedClasses.length > 0
-                                    ? `${newlyAddedClasses.length} class${newlyAddedClasses.length === 1 ? '' : 'es'} added. Continue or finish setup.`
-                                    : 'Add as many classes / semesters as you need.'}
-                            </div>
-                            <button
-                                type="button"
-                                onClick={closeAddClassModal}
-                                className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-extrabold shadow-sm transition whitespace-nowrap"
-                            >
-                                Done / Close
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* PRIMARY ACTION TOOLBAR */}
             <section className="space-y-3">
-                {isFirstTimeUser && (
-                    <div className="px-1">
-                        <h2 className="text-base font-black text-slate-900">Start Here</h2>
-                        <p className="text-xs font-medium text-slate-500 mt-0.5">
-                            Set up your teaching workspace in the correct order.
-                        </p>
-                    </div>
-                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <button
                         type="button"
                         onClick={openAddClassModal}
@@ -1047,202 +1523,197 @@ export default function TodayPage() {
                             <div className="p-2.5 bg-white/20 rounded-xl">
                                 <Layers className="w-5 h-5 text-white" />
                             </div>
+
                             <div>
                                 <span className="text-[10px] uppercase font-bold tracking-wider text-blue-100 block">
                                     Academic Setup
                                 </span>
+
                                 <h2 className="text-sm font-black text-white">
                                     Add Classes / Semesters
                                 </h2>
                             </div>
                         </div>
+
                         <Plus className="w-4 h-4 text-blue-200 group-hover:scale-110 transition" />
                     </button>
 
                     <button
                         type="button"
-                        onClick={() => {
-                            if (!d.classes || d.classes.length === 0) {
-                                openAddClassModal();
-                            } else {
-                                window.location.href = '/timetable';
-                            }
-                        }}
+                        onClick={() =>
+                            handleProtectedAction(
+                                () => {
+                                    window.location.href =
+                                        '/timetable';
+                                }
+                            )
+                        }
                         className="flex items-center justify-between p-4 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left"
                     >
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-white/20 rounded-xl">
                                 <CalendarDays className="w-5 h-5 text-white" />
                             </div>
+
                             <div>
                                 <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-100 block">
                                     Routine Setup
                                 </span>
+
                                 <h2 className="text-sm font-black text-white">
                                     Set Weekly Timetable
                                 </h2>
                             </div>
                         </div>
+
                         <ArrowRight className="w-4 h-4 text-emerald-200 group-hover:translate-x-1 transition" />
                     </button>
 
-                    <Link
-                        href="/log"
-                        className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group"
+                    <button
+                        type="button"
+                        onClick={() =>
+                            handleProtectedAction(
+                                () => {
+                                    window.location.href =
+                                        '/syllabus';
+                                }
+                            )
+                        }
+                        className="flex items-center justify-between p-4 bg-gradient-to-r from-cyan-600 to-teal-700 hover:from-cyan-700 hover:to-teal-800 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left"
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-white/20 rounded-xl">
+                                <BookMarked className="w-5 h-5 text-white" />
+                            </div>
+
+                            <div>
+                                <span className="text-[10px] uppercase font-bold tracking-wider text-cyan-100 block">
+                                    Curriculum
+                                </span>
+
+                                <h2 className="text-sm font-black text-white">
+                                    Syllabus Planner
+                                </h2>
+                            </div>
+                        </div>
+
+                        <ArrowRight className="w-4 h-4 text-cyan-200 group-hover:translate-x-1 transition" />
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() =>
+                            handleProtectedAction(
+                                () => {
+                                    window.location.href =
+                                        '/log';
+                                }
+                            )
+                        }
+                        className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left"
                     >
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-white/20 rounded-xl">
                                 <PlusCircle className="w-5 h-5 text-white" />
                             </div>
+
                             <div>
                                 <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-100 block">
                                     Register Entry
                                 </span>
+
                                 <h2 className="text-sm font-black text-white">
                                     Record Today&apos;s Class
                                 </h2>
                             </div>
                         </div>
-                        <ArrowRight className="w-4 h-4 text-indigo-200 group-hover:translate-x-1 transition" />
-                    </Link>
 
-                    <Link
-                        href="/holidays"
-                        className="flex items-center justify-between p-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group"
+                        <ArrowRight className="w-4 h-4 text-indigo-200 group-hover:translate-x-1 transition" />
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() =>
+                            handleProtectedAction(
+                                () => {
+                                    window.location.href =
+                                        '/holidays';
+                                }
+                            )
+                        }
+                        className="flex items-center justify-between p-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left"
                     >
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-white/20 rounded-xl">
                                 <SunMedium className="w-5 h-5 text-white" />
                             </div>
+
                             <div>
                                 <span className="text-[10px] uppercase font-bold tracking-wider text-amber-100 block">
                                     Calendar Hub
                                 </span>
+
                                 <h2 className="text-sm font-black text-white">
                                     Manage Holiday List
                                 </h2>
                             </div>
                         </div>
-                        <ArrowRight className="w-4 h-4 text-amber-200 group-hover:translate-x-1 transition" />
-                    </Link>
 
-                    <Link
-                        href="/reports"
-                        className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-700 hover:to-fuchsia-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group"
+                        <ArrowRight className="w-4 h-4 text-amber-200 group-hover:translate-x-1 transition" />
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() =>
+                            handleProtectedAction(
+                                () => {
+                                    window.location.href =
+                                        '/reports';
+                                }
+                            )
+                        }
+                        className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-700 hover:to-fuchsia-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left"
                     >
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-white/20 rounded-xl">
                                 <BarChart3 className="w-5 h-5 text-white" />
                             </div>
+
                             <div>
                                 <span className="text-[10px] uppercase font-bold tracking-wider text-purple-100 block">
                                     Review &amp; Analysis
                                 </span>
+
                                 <h2 className="text-sm font-black text-white">
                                     View Reports
                                 </h2>
                             </div>
                         </div>
+
                         <ArrowRight className="w-4 h-4 text-purple-200 group-hover:translate-x-1 transition" />
-                    </Link>
+                    </button>
+
                 </div>
             </section>
 
-            {/* HOLIDAY ALERT */}
-            {todayHoliday && (
-                <div className="rounded-3xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                        <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-md">
-                            <SunMedium className="w-7 h-7" />
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-200 text-amber-900">
-                                    {(todayHoliday as any).type || 'Institutional Holiday'}
-                                </span>
-                                <h2 className="text-lg font-black text-amber-950">
-                                    {todayHoliday.name}
-                                </h2>
-                            </div>
-                            <p className="text-xs font-semibold text-amber-800/90 mt-0.5">
-                                {todayHoliday.description ||
-                                    'Institutional non-instructional day. Standard routine classes are paused.'}
-                            </p>
-                        </div>
-                    </div>
+            {/* =================================================
+                METRICS
+               ================================================= */}
 
-                    <div className="flex flex-wrap items-center gap-2">
-                        {existingSuspensionLog ? (
-                            <button
-                                type="button"
-                                onClick={handleRemoveSuspensionLog}
-                                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-sm transition"
-                            >
-                                <Check className="w-4 h-4" />
-                                Holiday Recorded — Undo
-                            </button>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={() =>
-                                    handleRecordNonInstructionalDay(`Holiday: ${todayHoliday.name}`)
-                                }
-                                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm transition transform active:scale-95"
-                            >
-                                <CalendarDays className="w-4 h-4" />
-                                Record Holiday in Register
-                            </button>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* SUSPENSION / NOTICE */}
-            {existingSuspensionLog && !todayHoliday && (
-                <div className="rounded-3xl border-2 border-rose-300 bg-gradient-to-r from-rose-50 via-orange-50 to-rose-50 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                        <div className="p-3 bg-rose-600 text-white rounded-2xl shadow-md">
-                            <ShieldAlert className="w-7 h-7" />
-                        </div>
-                        <div>
-                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-rose-200 text-rose-900">
-                                Notice / Suspension Active
-                            </span>
-                            <h2 className="text-lg font-black text-rose-950 mt-0.5">
-                                {(existingSuspensionLog as any).plannedTopicName}
-                            </h2>
-                            <p className="text-xs font-semibold text-rose-800/90 mt-0.5">
-                                Today&apos;s teaching periods are marked as suspended in the progress register.
-                            </p>
-                        </div>
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={handleRemoveSuspensionLog}
-                        className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-sm transition"
-                    >
-                        <RotateCcw className="w-4 h-4" />
-                        Revert Suspension Status
-                    </button>
-                </div>
-            )}
-
-            {/* METRICS */}
             <section className="space-y-3">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+
                     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex items-center justify-between">
                         <div>
                             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                                 Today&apos;s Routine
                             </span>
+
                             <p className="mt-1 text-3xl font-black text-slate-900">
                                 {todaySlots.length}
                             </p>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                                Periods scheduled today
-                            </p>
                         </div>
+
                         <div className="p-3 bg-blue-50 text-blue-800 rounded-2xl">
                             <BookOpen className="w-6 h-6" />
                         </div>
@@ -1253,13 +1724,18 @@ export default function TodayPage() {
                             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                                 Classes Completed
                             </span>
+
                             <p className="mt-1 text-3xl font-black text-emerald-600">
                                 {totalClassesCompletedCount}
                             </p>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                                {todayDeliveredHours} teaching hours
-                            </p>
+
+                            {Number(todayDeliveredHours) > 0 && (
+                                <p className="mt-0.5 text-[10px] font-bold text-slate-400">
+                                    {todayDeliveredHours} hrs delivered
+                                </p>
+                            )}
                         </div>
+
                         <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
                             <CheckCircle2 className="w-6 h-6" />
                         </div>
@@ -1270,32 +1746,142 @@ export default function TodayPage() {
                             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
                                 Daily Completion
                             </span>
+
                             <p className="mt-1 text-3xl font-black text-indigo-600">
                                 {completionRate}%
                             </p>
-                            <p className="text-xs text-slate-500 mt-0.5">Teaching progress</p>
                         </div>
+
                         <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
                             <Percent className="w-6 h-6" />
                         </div>
                     </div>
-                </div>
 
-                <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden shadow-inner">
-                    <div
-                        className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500"
-                        style={{ width: `${completionRate}%` }}
-                    />
                 </div>
             </section>
 
-            {/* TODAY'S SCHEDULE */}
+            {/* =================================================
+                HOLIDAY ALERT
+               ================================================= */}
+
+            {todayHoliday && (
+                <div className="rounded-3xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+
+                    <div className="flex items-center gap-3.5">
+
+                        <div className="p-3 bg-amber-500 text-white rounded-2xl shadow-md">
+                            <SunMedium className="w-7 h-7" />
+                        </div>
+
+                        <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+
+                                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-200 text-amber-900">
+                                    {todayHoliday.type ||
+                                        'Institutional Holiday'}
+                                </span>
+
+                                <h2 className="text-lg font-black text-amber-950">
+                                    {todayHoliday.name}
+                                </h2>
+
+                            </div>
+
+                            <p className="text-xs font-semibold text-amber-800/90 mt-0.5">
+                                {todayHoliday.description ||
+                                    'Institutional non-instructional day. Standard routine classes are paused.'}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+
+                        {existingSuspensionLog ? (
+                            <button
+                                type="button"
+                                onClick={
+                                    handleRemoveSuspensionLog
+                                }
+                                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-sm transition"
+                            >
+                                <Check className="w-4 h-4" />
+                                Holiday Recorded — Undo
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    handleRecordNonInstructionalDay(
+                                        `Holiday: ${todayHoliday.name}`
+                                    )
+                                }
+                                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm transition"
+                            >
+                                <CalendarDays className="w-4 h-4" />
+                                Record Holiday in Register
+                            </button>
+                        )}
+
+                    </div>
+                </div>
+            )}
+
+            {/* =================================================
+                SUSPENSION / NOTICE
+               ================================================= */}
+
+            {existingSuspensionLog &&
+                !todayHoliday && (
+                    <div className="rounded-3xl border-2 border-rose-300 bg-gradient-to-r from-rose-50 via-orange-50 to-rose-50 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+
+                        <div className="flex items-center gap-3.5">
+
+                            <div className="p-3 bg-rose-600 text-white rounded-2xl shadow-md">
+                                <ShieldAlert className="w-7 h-7" />
+                            </div>
+
+                            <div>
+                                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-rose-200 text-rose-900">
+                                    Notice / Suspension Active
+                                </span>
+
+                                <h2 className="text-lg font-black text-rose-950 mt-0.5">
+                                    {existingSuspensionLog.remarks ||
+                                        'Classes Suspended'}
+                                </h2>
+
+                                <p className="text-xs font-semibold text-rose-800/90 mt-0.5">
+                                    Today&apos;s teaching periods are marked as suspended in the progress register.
+                                </p>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={
+                                handleRemoveSuspensionLog
+                            }
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-sm transition"
+                        >
+                            <RotateCcw className="w-4 h-4" />
+                            Revert Suspension Status
+                        </button>
+                    </div>
+                )}
+
+            {/* =================================================
+                TODAY'S SCHEDULE
+               ================================================= */}
+
             <section className="space-y-4">
+
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
+
                     <div>
                         <h2 className="text-lg font-black text-slate-900">
                             Today&apos;s Class Schedule
                         </h2>
+
                         <p className="text-xs font-medium text-slate-500">
                             Today&apos;s periods in chronological order
                         </p>
@@ -1304,33 +1890,25 @@ export default function TodayPage() {
                     <div className="flex items-center flex-wrap gap-2">
                         <button
                             type="button"
-                            onClick={() => setIsDataHubOpen(true)}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 rounded-xl border border-slate-200 transition shadow-sm"
-                        >
-                            <Download className="w-3.5 h-3.5 text-slate-500" />
-                            Export Register
-                        </button>
-
-                        <Link
-                            href="/timetable"
-                            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-blue-900 bg-blue-50 hover:bg-blue-100 rounded-xl border border-blue-200 transition shadow-sm"
-                        >
-                            <CalendarDays className="w-3.5 h-3.5 text-blue-700" />
-                            Full Timetable
-                        </Link>
-
-                        <Link
-                            href="/timetable"
+                            onClick={() =>
+                                handleProtectedAction(
+                                    () => {
+                                        window.location.href =
+                                            '/timetable';
+                                    }
+                                )
+                            }
                             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-extrabold text-white bg-blue-950 hover:bg-blue-900 rounded-xl transition shadow-sm"
                         >
                             <Plus className="w-3.5 h-3.5" />
                             + Add Period for Today
-                        </Link>
+                        </button>
                     </div>
                 </div>
 
                 {todaySlots.length === 0 ? (
                     <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-white p-10 md:p-12 text-center shadow-sm space-y-4">
+
                         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-2xl text-blue-600">
                             ☕
                         </div>
@@ -1341,424 +1919,1314 @@ export default function TodayPage() {
                                     ? `${todayHoliday.name} — No Routine Classes`
                                     : 'No Routine Classes Scheduled for Today'}
                             </h3>
+
                             <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
-                                {todayHoliday
-                                    ? 'Enjoy your holiday! If you are conducting special classes, student doubt sessions, or extra activities, use the register options above.'
-                                    : 'You have no timetable periods assigned for this day of the week. Add a recurring period below or register an extra class.'}
+                                You have no timetable periods assigned for this day of the week.
                             </p>
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-                            {todayHoliday && !existingSuspensionLog && (
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        handleRecordNonInstructionalDay(`Holiday: ${todayHoliday.name}`)
+                        <button
+                            type="button"
+                            onClick={() =>
+                                handleProtectedAction(
+                                    () => {
+                                        window.location.href =
+                                            '/timetable';
                                     }
-                                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm transition"
-                                >
-                                    <CalendarDays className="w-4 h-4" />
-                                    Record Holiday in Register
-                                </button>
-                            )}
-
-                            <Link
-                                href="/timetable"
-                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition transform active:scale-95"
-                            >
-                                <Plus className="w-4 h-4" />
-                                Set Up Timetable Routine
-                            </Link>
-                        </div>
+                                )
+                            }
+                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Set Up Timetable Routine
+                        </button>
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        {todaySlots.map((s: any) => {
-                            const c = getCourse(s.courseId);
-                            const isDone = doneSlotIds.includes(s.id);
+
+                        {todaySlots.map((slot) => {
+                            const course =
+                                getCourse(
+                                    slot.courseId
+                                );
+
+                            const logEntry =
+                                todayLogs.find(
+                                    (log) =>
+                                        log.date ===
+                                            todayDateStr &&
+                                        log.slotId ===
+                                            slot.id
+                                );
+
+                            const hasLog =
+                                !!logEntry;
+
+                            const isCompleted =
+                                !!logEntry &&
+                                isTeachingCompleted(
+                                    logEntry
+                                );
+
+                            const isCancelled =
+                                !!logEntry &&
+                                isCancelledLog(
+                                    logEntry
+                                );
+
+                            const isRecorded =
+                                hasLog;
 
                             return (
                                 <div
-                                    key={s.id}
+                                    key={slot.id}
                                     className={`rounded-3xl border p-5 shadow-sm transition flex flex-col md:flex-row md:items-center md:justify-between gap-4 ${
-                                        isDone
+                                        isCompleted
                                             ? 'border-emerald-200 bg-emerald-50/30'
+                                            : isCancelled
+                                            ? 'border-rose-200 bg-rose-50/20'
                                             : 'border-slate-200 bg-white hover:border-blue-200 hover:shadow-md'
                                     }`}
                                 >
-                                    <div className="space-y-2">
+
+                                    <div className="space-y-2.5 flex-1">
+
                                         <div className="flex flex-wrap items-center gap-2">
+
                                             <span
                                                 className={`px-2.5 py-0.5 rounded-md font-black text-xs ${
-                                                    isDone
+                                                    isCompleted
                                                         ? 'bg-emerald-700 text-white'
+                                                        : isCancelled
+                                                        ? 'bg-rose-700 text-white'
                                                         : 'bg-blue-950 text-white'
                                                 }`}
                                             >
-                                                Period {s.period}
+                                                Period {slot.period || '—'}
                                             </span>
 
                                             <h3 className="text-base font-extrabold text-slate-900">
-                                                {c?.name || 'Unknown Subject'}
+                                                {course?.name ||
+                                                    'Unknown Subject'}
                                             </h3>
 
-                                            {c?.code && (
+                                            {course?.code && (
                                                 <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold text-xs">
-                                                    {c.code}
+                                                    {course.code}
                                                 </span>
                                             )}
 
-                                            {(s.semesterClass || c?.semester) && (
+                                            {(slot.semesterClass ||
+                                                course?.semester) && (
                                                 <span className="text-xs font-semibold text-slate-500">
-                                                    · {s.semesterClass || c?.semester}
+                                                    ·{' '}
+                                                    {slot.semesterClass ||
+                                                        course?.semester}
                                                 </span>
                                             )}
+
                                         </div>
 
                                         <div className="flex flex-wrap items-center gap-3 text-xs">
+
                                             <span className="flex items-center gap-1 font-semibold text-slate-700">
                                                 <Clock className="w-3.5 h-3.5 text-blue-600" />
-                                                {s.start} – {s.end}
+                                                {slot.start} –{' '}
+                                                {slot.end}
                                             </span>
 
-                                            {s.room && (
+                                            {slot.room && (
                                                 <span className="flex items-center gap-1 font-semibold text-slate-600">
                                                     <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                                                    {s.room}
+                                                    {slot.room}
                                                 </span>
                                             )}
+
                                         </div>
+
+                                        {/* =====================================
+                                            COMPLETED LOG
+                                           ===================================== */}
+
+                                        {logEntry &&
+                                            isCompleted && (
+                                                <div className="mt-2.5 p-3.5 rounded-2xl bg-white border border-emerald-200 shadow-xs space-y-1.5 text-xs">
+
+                                                    <div className="flex items-center justify-between flex-wrap gap-2">
+
+                                                        <span className="font-black text-emerald-950">
+                                                            ✓ Covered:{' '}
+                                                            {logEntry.covered ||
+                                                                logEntry.plannedTopicName ||
+                                                                'Completed'}
+                                                        </span>
+
+                                                        <span className="px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-extrabold text-[10px] uppercase tracking-wider">
+                                                            Status:{' '}
+                                                            {getStatusLabel(
+                                                                logEntry
+                                                            )}
+                                                        </span>
+
+                                                    </div>
+
+                                                    <div className="flex items-center gap-4 text-[11px] text-slate-600 font-medium pt-0.5">
+
+                                                        {logEntry.attendance !==
+                                                            undefined &&
+                                                            logEntry.attendance !==
+                                                                null && (
+                                                                <span>
+                                                                    👥 Attendance:{' '}
+                                                                    <strong>
+                                                                        {
+                                                                            logEntry.attendance
+                                                                        }{' '}
+                                                                        students
+                                                                    </strong>
+                                                                </span>
+                                                            )}
+
+                                                        {Number(
+                                                            logEntry.hours ||
+                                                                0
+                                                        ) > 0 && (
+                                                            <span>
+                                                                ⏱️ Workload:{' '}
+                                                                <strong>
+                                                                    {Number(
+                                                                        logEntry.hours ||
+                                                                            0
+                                                                    )}{' '}
+                                                                    hrs
+                                                                </strong>
+                                                            </span>
+                                                        )}
+
+                                                    </div>
+
+                                                    {logEntry.remarks && (
+                                                        <p className="text-[11px] text-slate-500 italic pt-0.5">
+                                                            Remarks:{' '}
+                                                            {
+                                                                logEntry.remarks
+                                                            }
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                        {/* =====================================
+                                            CANCELLED LOG
+                                           ===================================== */}
+
+                                        {logEntry &&
+                                            isCancelled && (
+                                                <div className="mt-2.5 p-3.5 rounded-2xl bg-white border border-rose-200 shadow-xs space-y-1.5 text-xs">
+
+                                                    <div className="flex items-center justify-between flex-wrap gap-2">
+
+                                                        <span className="font-black text-rose-950">
+                                                            ✕ Period Cancelled
+                                                        </span>
+
+                                                        <span className="px-2.5 py-0.5 rounded-md bg-rose-100 text-rose-800 font-extrabold text-[10px] uppercase tracking-wider">
+                                                            Status: Cancelled
+                                                        </span>
+
+                                                    </div>
+
+                                                    {logEntry.remarks && (
+                                                        <p className="text-[11px] text-slate-500 italic pt-0.5">
+                                                            Remarks:{' '}
+                                                            {
+                                                                logEntry.remarks
+                                                            }
+                                                        </p>
+                                                    )}
+
+                                                </div>
+                                            )}
+
+                                        {/* =====================================
+                                            OTHER / UNKNOWN RECORDED LOG
+                                           ===================================== */}
+
+                                        {logEntry &&
+                                            !isCompleted &&
+                                            !isCancelled && (
+                                                <div className="mt-2.5 p-3.5 rounded-2xl bg-white border border-amber-200 shadow-xs space-y-1.5 text-xs">
+
+                                                    <div className="flex items-center justify-between flex-wrap gap-2">
+
+                                                        <span className="font-black text-amber-950">
+                                                            Recorded
+                                                        </span>
+
+                                                        <span className="px-2.5 py-0.5 rounded-md bg-amber-100 text-amber-800 font-extrabold text-[10px] uppercase tracking-wider">
+                                                            Status:{' '}
+                                                            {getStatusLabel(
+                                                                logEntry
+                                                            )}
+                                                        </span>
+
+                                                    </div>
+
+                                                    {logEntry.covered && (
+                                                        <p className="text-[11px] text-slate-600">
+                                                            Covered:{' '}
+                                                            {
+                                                                logEntry.covered
+                                                            }
+                                                        </p>
+                                                    )}
+
+                                                </div>
+                                            )}
+
                                     </div>
 
+                                    {/* =========================================
+                                        ACTIONS
+                                       ========================================= */}
+
                                     <div className="flex items-center gap-2 self-end md:self-center">
-                                        {isDone ? (
+
+                                        {isRecorded ? (
                                             <div className="flex items-center gap-2">
-                                                <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-100 text-emerald-800 font-extrabold text-xs ring-1 ring-emerald-300">
-                                                    <CheckCircle2 className="w-4 h-4" />
-                                                    Logged
-                                                </span>
+
+                                                <Link
+                                                    href={`/log?editId=${encodeURIComponent(
+                                                        logEntry?.id || ''
+                                                    )}`}
+                                                    className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold text-xs transition border border-blue-200 shadow-xs"
+                                                >
+                                                    Edit Log
+                                                </Link>
 
                                                 <button
                                                     type="button"
-                                                    onClick={() => handleUndoLog(s.id)}
-                                                    title="Re-open this teaching period"
+                                                    onClick={() =>
+                                                        handleUndoLog(
+                                                            slot.id
+                                                        )
+                                                    }
+                                                    title="Re-open period"
                                                     className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-slate-200"
                                                 >
                                                     <RotateCcw className="w-4 h-4" />
                                                 </button>
+
                                             </div>
                                         ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleOpenQuickLog(s)}
-                                                className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition transform active:scale-95"
-                                            >
-                                                <Check className="w-4 h-4" />
-                                                Mark Period Complete
-                                            </button>
+                                            <div className="flex items-center gap-2">
+
+                                                <Link
+                                                    href={`/log?slotId=${encodeURIComponent(
+                                                        slot.id
+                                                    )}`}
+                                                    className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition"
+                                                >
+                                                    Open Register
+                                                </Link>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        handleOpenQuickLog(
+                                                            slot
+                                                        )
+                                                    }
+                                                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition"
+                                                >
+                                                    <Check className="w-4 h-4" />
+                                                    Quick Complete
+                                                </button>
+
+                                            </div>
                                         )}
+
                                     </div>
+
                                 </div>
                             );
                         })}
+
                     </div>
                 )}
             </section>
 
-            {/* EXTRA / UNSCHEDULED CLASSES */}
+            {/* =================================================
+                EXTRA / UNSCHEDULED CLASSES
+               ================================================= */}
+
             {todayExtraClasses.length > 0 && (
-                <div className="mt-5 space-y-3">
+                <section className="space-y-3">
+
                     <div className="flex items-center gap-2 px-1">
-                        <div className="h-2 w-2 rounded-full bg-amber-500" />
-                        <h3 className="text-sm font-black text-slate-900">
+
+                        <div className="h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
+
+                        <h2 className="text-lg font-black text-slate-950">
                             Extra / Unscheduled Classes Today
-                        </h3>
-                        <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                        </h2>
+
+                        <span className="text-xs font-black text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full">
                             {todayExtraClasses.length}
                         </span>
                     </div>
 
-                    {todayExtraClasses.map((extra: any) => {
-                        const c = getCourse(extra.courseId);
+                    <div className="space-y-3">
 
-                        return (
-                            <div
-                                key={extra.id}
-                                className="rounded-3xl border-2 border-amber-200 bg-amber-50/40 p-5 shadow-sm"
-                            >
-                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                                    <div className="space-y-2">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <span className="px-2.5 py-0.5 rounded-md bg-amber-600 text-white font-black text-xs">
-                                                Extra / Unscheduled
-                                            </span>
+                        {todayExtraClasses.map(
+                            (extra) => {
+                                const course =
+                                    extra.courseId !==
+                                    'custom_activity'
+                                        ? getCourse(
+                                              extra.courseId
+                                          )
+                                        : null;
 
-                                            <h3 className="text-base font-extrabold text-slate-900">
-                                                {c?.name || extra.courseName || 'Extra / Unscheduled Class'}
-                                            </h3>
+                                const subjectName =
+                                    course?.name ||
+                                    extra.customSubjectName ||
+                                    extra.plannedTopicName ||
+                                    'Extra Teaching Session';
 
-                                            {c?.code && (
-                                                <span className="px-2 py-0.5 rounded-md bg-white text-slate-700 font-bold text-xs border border-amber-200">
-                                                    {c.code}
+                                return (
+                                    <div
+                                        key={
+                                            extra.id
+                                        }
+                                        className="rounded-3xl border-2 border-amber-300 bg-gradient-to-r from-amber-50/70 via-orange-50/40 to-amber-50/70 p-5 shadow-sm transition hover:shadow-md flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+                                    >
+
+                                        <div className="space-y-2.5 flex-1">
+
+                                            <div className="flex flex-wrap items-center gap-2">
+
+                                                <span className="px-2.5 py-0.5 rounded-md bg-amber-600 text-white font-black text-xs">
+                                                    Extra / Unscheduled
                                                 </span>
-                                            )}
 
-                                            {(extra.semesterClass || c?.semester) && (
-                                                <span className="text-xs font-semibold text-slate-500">
-                                                    · {extra.semesterClass || c?.semester}
-                                                </span>
-                                            )}
+                                                <h3 className="text-base font-extrabold text-slate-900">
+                                                    {
+                                                        subjectName
+                                                    }
+                                                </h3>
+
+                                                {course?.code && (
+                                                    <span className="px-2 py-0.5 rounded-md bg-white text-slate-700 font-bold text-xs border border-amber-200">
+                                                        {
+                                                            course.code
+                                                        }
+                                                    </span>
+                                                )}
+
+                                                {extra.semester && (
+                                                    <span className="text-xs font-semibold text-slate-500">
+                                                        ·{' '}
+                                                        {
+                                                            extra.semester
+                                                        }
+                                                    </span>
+                                                )}
+
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-3 text-xs">
+
+                                                {extra.actualStart &&
+                                                    extra.actualEnd && (
+                                                        <span className="flex items-center gap-1 font-semibold text-slate-700">
+                                                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                                            {
+                                                                extra.actualStart
+                                                            }{' '}
+                                                            –{' '}
+                                                            {
+                                                                extra.actualEnd
+                                                            }
+                                                        </span>
+                                                    )}
+
+                                                {extra.room && (
+                                                    <span className="flex items-center gap-1 font-semibold text-slate-600">
+                                                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                                                        {
+                                                            extra.room
+                                                        }
+                                                    </span>
+                                                )}
+
+                                                {Number(
+                                                    extra.hours ||
+                                                        0
+                                                ) > 0 && (
+                                                    <span className="font-bold text-slate-600">
+                                                        ⏱️{' '}
+                                                        {Number(
+                                                            extra.hours
+                                                        )}{' '}
+                                                        hrs
+                                                    </span>
+                                                )}
+
+                                            </div>
+
                                         </div>
 
-                                        <div className="flex flex-wrap items-center gap-3 text-xs">
-                                            {(extra.actualStart || extra.actualEnd) && (
-                                                <span className="flex items-center gap-1 font-semibold text-slate-700">
-                                                    <Clock className="w-3.5 h-3.5 text-amber-600" />
-                                                    {extra.actualStart || '--:--'} – {extra.actualEnd || '--:--'}
-                                                </span>
-                                            )}
+                                        <div className="flex items-center gap-2 self-end md:self-center">
 
-                                            {extra.room && (
-                                                <span className="flex items-center gap-1 font-semibold text-slate-600">
-                                                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                                                    {extra.room}
-                                                </span>
-                                            )}
+                                            <Link
+                                                href={`/log?editId=${encodeURIComponent(
+                                                    extra.id
+                                                )}`}
+                                                className="px-4 py-2.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold text-xs transition border border-amber-300 shadow-xs"
+                                            >
+                                                Edit Log
+                                            </Link>
+
                                         </div>
 
-                                        {extra.covered && (
-                                            <p className="text-xs font-semibold text-slate-600">
-                                                <span className="font-black text-slate-700">Covered:</span> {extra.covered}
-                                            </p>
-                                        )}
-
-                                        {extra.remarks && (
-                                            <p className="text-xs text-slate-500">
-                                                <span className="font-bold">Remarks:</span> {extra.remarks}
-                                            </p>
-                                        )}
                                     </div>
+                                );
+                            }
+                        )}
 
-                                    <div className="self-start md:self-center">
-                                        <span className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-100 text-amber-800 font-extrabold text-xs ring-1 ring-amber-300">
-                                            <CheckCircle2 className="w-4 h-4" />
-                                            {extra.status || 'Recorded'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
+                    </div>
+                </section>
             )}
 
-            {/* MODAL: SUSPEND TODAY'S TEACHING */}
-            {isSuspendModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-                    <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                            <div>
-                                <h3 className="text-base font-black text-slate-900">
-                                    Suspend Today&apos;s Teaching
-                                </h3>
-                                <p className="text-xs text-slate-500">
-                                    Record examinations, institutional programmes, weather-related closures, or other non-instructional days.
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsSuspendModalOpen(false)}
-                                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
-                                title="Close"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
+            {/* =================================================
+                ADD CLASS MODAL
+               ================================================= */}
 
-                        <div className="space-y-3">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-800 mb-1">
-                                    Select Reason for Suspension / Closure
-                                </label>
-                                <select
-                                    value={suspensionReason}
-                                    onChange={(e) => setSuspensionReason(e.target.value)}
-                                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-slate-50 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-600"
+            {isAddClassModalOpen && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md animate-in fade-in"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="add-class-title"
+                >
+                    <div
+                        className="w-full max-w-lg max-h-[92vh] overflow-hidden rounded-[30px] border border-white/40 bg-white shadow-2xl flex flex-col"
+                        onClick={(event) =>
+                            event.stopPropagation()
+                        }
+                    >
+
+                        {/* =====================================
+                            BRAND HEADER
+                           ===================================== */}
+
+                        <div className="relative shrink-0 overflow-hidden bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 px-5 py-4 text-white">
+
+                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.35),transparent_50%)]" />
+
+                            <div className="relative flex items-center justify-between gap-3">
+
+                                <div className="flex min-w-0 items-center gap-3">
+
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 p-1.5 ring-1 ring-white/25 backdrop-blur-sm shadow-inner">
+
+                                        <Image
+                                            src="/apnsir-logo.png"
+                                            alt="APNSIR Foundation"
+                                            width={32}
+                                            height={32}
+                                            className="max-h-full max-w-full object-contain rounded-full"
+                                            priority
+                                        />
+
+                                    </div>
+
+                                    <div className="min-w-0">
+
+                                        <div className="flex items-center gap-2">
+
+                                            <span className="truncate text-[9px] font-black uppercase tracking-[0.2em] text-indigo-300">
+                                                OdishaTeachers.com
+                                            </span>
+
+                                            <span className="rounded-full bg-indigo-500/20 px-1.5 py-0.5 text-[8px] font-bold text-indigo-200 ring-1 ring-indigo-400/30">
+                                                APNSIR
+                                            </span>
+
+                                        </div>
+
+                                        <p
+                                            id="add-class-title"
+                                            className="truncate text-sm font-extrabold text-white"
+                                        >
+                                            ProfPlan &bull; Academic Workspace Setup
+                                        </p>
+
+                                    </div>
+
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={
+                                        closeAddClassModal
+                                    }
+                                    className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition"
+                                    title="Close"
+                                    aria-label="Close academic workspace setup"
                                 >
-                                    <option value="Classes Suspended due to Examination">
-                                        Classes Suspended due to Examination
-                                    </option>
-                                    <option value="Classes Suspended due to College Programme / Function">
-                                        Classes Suspended due to College Programme / Function
-                                    </option>
-                                    <option value="Classes Suspended due to Inclement Weather / Notice">
-                                        Classes Suspended due to Inclement Weather / Notice
-                                    </option>
-                                    <option value="Institutional Non-Instructional Day">
-                                        Institutional Non-Instructional Day
-                                    </option>
-                                </select>
+                                    <X className="w-5 h-5" />
+                                </button>
+
                             </div>
-                            <p className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200 font-medium">
-                                This will mark today&apos;s date as suspended in your progress register and reports without requiring individual period completions.
-                            </p>
                         </div>
 
-                        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-                            <button
-                                type="button"
-                                onClick={() => setIsSuspendModalOpen(false)}
-                                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                        {/* =====================================
+                            MODAL BODY
+                           ===================================== */}
+
+                        <div className="overflow-y-auto px-6 py-5 space-y-4">
+
+                            {/* ADVISORY */}
+
+                            <div className="rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 via-violet-50/60 to-indigo-50 p-4 shadow-sm">
+
+                                <div className="flex items-start gap-3">
+
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
+                                        <Info className="h-4 w-4" />
+                                    </div>
+
+                                    <div className="min-w-0 flex-1">
+
+                                        <p className="text-xs font-black text-indigo-950">
+                                            Configure Your Classes &amp; Semesters
+                                        </p>
+
+                                        <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-800 font-medium">
+                                            Add all your active academic groups. Once configured, you can easily attach subjects, plan your syllabus, and map your timetable.
+                                        </p>
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+                            {/* SUCCESS */}
+
+                            {classSaveMessage && (
+                                <div
+                                    role="status"
+                                    className="flex items-start gap-2.5 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-xs text-emerald-950 shadow-md animate-in fade-in zoom-in-95"
+                                >
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5 animate-bounce" />
+
+                                    <span className="font-extrabold leading-relaxed">
+                                        {
+                                            classSaveMessage
+                                        }
+                                    </span>
+                                </div>
+                            )}
+
+                            <form
+                                onSubmit={
+                                    handleSaveNewClass
+                                }
+                                className="space-y-4"
                             >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handleRecordNonInstructionalDay(suspensionReason)}
-                                className="px-6 py-2.5 bg-rose-700 hover:bg-rose-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition transform active:scale-95"
-                            >
-                                Confirm &amp; Log to Report
-                            </button>
+
+                                {/* CLASS NAME */}
+
+                                <div>
+
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">
+                                        Class / Semester Name{' '}
+                                        <span className="text-rose-500">
+                                            *
+                                        </span>
+                                    </label>
+
+                                    <input
+                                        ref={
+                                            classNameInputRef
+                                        }
+                                        type="text"
+                                        placeholder="e.g. BA 1st Semester, +2 1st Year Arts, Class XI"
+                                        value={
+                                            newClassName
+                                        }
+                                        onChange={(
+                                            event
+                                        ) => {
+                                            setNewClassName(
+                                                event.target
+                                                    .value
+                                            );
+                                            setClassSaveMessage(
+                                                null
+                                            );
+                                            setErrorMessage(
+                                                null
+                                            );
+                                        }}
+                                        required
+                                        className="w-full rounded-xl border-2 border-indigo-200/80 bg-indigo-50/20 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-600 focus:bg-white focus:ring-4 focus:ring-indigo-100 transition"
+                                    />
+
+                                </div>
+
+                                {/* STREAM */}
+
+                                <div>
+
+                                    <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">
+                                        Stream / Faculty *
+                                    </label>
+
+                                    <select
+                                        value={
+                                            newClassStream
+                                        }
+                                        onChange={(
+                                            event
+                                        ) => {
+                                            const value =
+                                                event.target
+                                                    .value;
+
+                                            setNewClassStream(
+                                                value
+                                            );
+
+                                            setClassSaveMessage(
+                                                null
+                                            );
+
+                                            setErrorMessage(
+                                                null
+                                            );
+
+                                            if (
+                                                value !==
+                                                'Other / Custom'
+                                            ) {
+                                                setCustomStreamInput(
+                                                    ''
+                                                );
+                                            }
+                                        }}
+                                        className="w-full rounded-xl border-2 border-indigo-200/80 bg-indigo-50/20 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-600 focus:bg-white focus:ring-4 focus:ring-indigo-100 transition"
+                                    >
+                                        <option value="Arts Stream">
+                                            Arts Stream
+                                        </option>
+
+                                        <option value="Science Stream">
+                                            Science Stream
+                                        </option>
+
+                                        <option value="Commerce Stream">
+                                            Commerce Stream
+                                        </option>
+
+                                        <option value="Vocational">
+                                            Vocational
+                                        </option>
+
+                                        <option value="General / Academic">
+                                            General / Academic
+                                        </option>
+
+                                        <option value="Other / Custom">
+                                            Other / Custom
+                                        </option>
+                                    </select>
+
+                                    {newClassStream ===
+                                        'Other / Custom' && (
+                                        <div className="mt-2.5">
+
+                                            <input
+                                                type="text"
+                                                placeholder="Enter Custom Stream Name"
+                                                value={
+                                                    customStreamInput
+                                                }
+                                                onChange={(
+                                                    event
+                                                ) => {
+                                                    setCustomStreamInput(
+                                                        event
+                                                            .target
+                                                            .value
+                                                    );
+
+                                                    setClassSaveMessage(
+                                                        null
+                                                    );
+
+                                                    setErrorMessage(
+                                                        null
+                                                    );
+                                                }}
+                                                required
+                                                className="w-full rounded-xl border-2 border-indigo-300 bg-indigo-50/40 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-600 focus:bg-white focus:ring-4 focus:ring-indigo-100 transition"
+                                            />
+
+                                        </div>
+                                    )}
+
+                                </div>
+
+                                {/* EXISTING CLASSES */}
+
+                                {d.classes &&
+                                    d.classes.length >
+                                        0 && (
+                                        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2">
+
+                                            <div className="flex items-center justify-between">
+
+                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                                    Already Registered Academic Groups (
+                                                    {
+                                                        d.classes
+                                                            .length
+                                                    }
+                                                    )
+                                                </span>
+
+                                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                                                    Hierarchy Sorted
+                                                </span>
+
+                                            </div>
+
+                                            <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+
+                                                {d.classes.map(
+                                                    (
+                                                        cls,
+                                                        index
+                                                    ) => {
+                                                        const isEditing =
+                                                            editingClassId ===
+                                                            cls.id;
+
+                                                        return (
+                                                            <div
+                                                                key={
+                                                                    cls.id
+                                                                }
+                                                                className={`rounded-xl border p-3 transition flex items-center justify-between gap-2 ${
+                                                                    isEditing
+                                                                        ? 'bg-indigo-50/90 border-2 border-indigo-600 shadow-md ring-2 ring-indigo-200'
+                                                                        : 'bg-white border-slate-200 shadow-xs hover:border-indigo-200'
+                                                                }`}
+                                                            >
+
+                                                                {isEditing ? (
+                                                                    <div className="space-y-2 w-full">
+
+                                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+
+                                                                            <input
+                                                                                ref={
+                                                                                    editClassInputRef
+                                                                                }
+                                                                                type="text"
+                                                                                value={
+                                                                                    editClassNameVal
+                                                                                }
+                                                                                onChange={(
+                                                                                    event
+                                                                                ) =>
+                                                                                    setEditClassNameVal(
+                                                                                        event
+                                                                                            .target
+                                                                                            .value
+                                                                                    )
+                                                                                }
+                                                                                placeholder="Class Name"
+                                                                                className="w-full px-3 py-1.5 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-white text-slate-900 outline-none"
+                                                                            />
+
+                                                                            <input
+                                                                                type="text"
+                                                                                value={
+                                                                                    editClassStreamVal
+                                                                                }
+                                                                                onChange={(
+                                                                                    event
+                                                                                ) =>
+                                                                                    setEditClassStreamVal(
+                                                                                        event
+                                                                                            .target
+                                                                                            .value
+                                                                                    )
+                                                                                }
+                                                                                placeholder="Stream / Branch"
+                                                                                className="w-full px-3 py-1.5 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-white text-slate-900 outline-none"
+                                                                            />
+
+                                                                        </div>
+
+                                                                        <div className="flex justify-end gap-2 pt-1">
+
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    setEditingClassId(
+                                                                                        null
+                                                                                    )
+                                                                                }
+                                                                                className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-extrabold rounded-md transition"
+                                                                            >
+                                                                                Cancel
+                                                                            </button>
+
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    handleSaveEditClass(
+                                                                                        cls.id
+                                                                                    )
+                                                                                }
+                                                                                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-md shadow transition"
+                                                                            >
+                                                                                Save
+                                                                            </button>
+
+                                                                        </div>
+
+                                                                    </div>
+                                                                ) : (
+                                                                    <>
+
+                                                                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+
+                                                                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 text-[10px] font-black">
+                                                                                {
+                                                                                    index +
+                                                                                    1
+                                                                                }
+                                                                            </span>
+
+                                                                            <span className="truncate text-xs font-bold text-slate-800">
+                                                                                {
+                                                                                    cls.name
+                                                                                }{' '}
+                                                                                <span className="text-slate-400 font-normal">
+                                                                                    (
+                                                                                    {
+                                                                                        cls.stream
+                                                                                    }
+                                                                                    )
+                                                                                </span>
+                                                                            </span>
+
+                                                                        </div>
+
+                                                                        <div className="flex items-center gap-1 shrink-0">
+
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    handleStartEditClass(
+                                                                                        cls
+                                                                                    )
+                                                                                }
+                                                                                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[11px] tracking-wide uppercase shadow-sm transition"
+                                                                                title="Edit Class Name"
+                                                                            >
+                                                                                Edit
+                                                                            </button>
+
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    handleDeleteClass(
+                                                                                        cls.id
+                                                                                    )
+                                                                                }
+                                                                                className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg shrink-0 transition hover:bg-rose-50"
+                                                                                title="Delete class"
+                                                                                aria-label={`Delete ${cls.name}`}
+                                                                            >
+                                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                                            </button>
+
+                                                                        </div>
+
+                                                                    </>
+                                                                )}
+
+                                                            </div>
+                                                        );
+                                                    }
+                                                )}
+
+                                            </div>
+                                        </div>
+                                    )}
+
+                                {/* FOOTER */}
+
+                                <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+
+                                    <button
+                                        type="button"
+                                        onClick={
+                                            closeAddClassModal
+                                        }
+                                        className="px-5 py-3 text-xs font-extrabold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                                    >
+                                        Cancel / Done
+                                    </button>
+
+                                    <button
+                                        type="submit"
+                                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-6 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-indigo-200 transition hover:opacity-95"
+                                    >
+                                        <Check className="h-4 w-4" />
+                                        Save Class
+                                    </button>
+
+                                </div>
+
+                            </form>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* MODAL: QUICK LOG */}
+            {/* =================================================
+                QUICK LOG MODAL
+               ================================================= */}
+
             {activeSlot && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-                    <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="quick-log-title"
+                >
+                    <div
+                        className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150"
+                        onClick={(event) =>
+                            event.stopPropagation()
+                        }
+                    >
+
                         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+
                             <div>
-                                <h3 className="text-base font-black text-slate-900">
-                                    Quick Log: Period {activeSlot.period}
+
+                                <h3
+                                    id="quick-log-title"
+                                    className="text-base font-black text-slate-900"
+                                >
+                                    Quick Log: Period{' '}
+                                    {activeSlot.period ||
+                                        '—'}
                                 </h3>
+
                                 <p className="text-xs text-slate-500">
-                                    {getCourse(activeSlot.courseId)?.name} ({activeSlot.start} – {activeSlot.end})
+                                    {
+                                        getCourse(
+                                            activeSlot.courseId
+                                        )?.name
+                                    }{' '}
+                                    (
+                                    {
+                                        activeSlot.start
+                                    }{' '}
+                                    –{' '}
+                                    {
+                                        activeSlot.end
+                                    }
+                                    )
                                 </p>
+
                             </div>
+
                             <button
                                 type="button"
-                                onClick={() => setActiveSlot(null)}
+                                onClick={() =>
+                                    setActiveSlot(
+                                        null
+                                    )
+                                }
                                 className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
                                 title="Close"
+                                aria-label="Close quick log"
                             >
                                 <X className="w-5 h-5" />
                             </button>
+
                         </div>
 
-                        <form onSubmit={handleSaveQuickLog} className="space-y-4">
+                        <form
+                            onSubmit={
+                                handleSaveQuickLog
+                            }
+                            className="space-y-4"
+                        >
+
+                            {/* PLANNED TOPIC */}
+
                             <div>
+
                                 <label className="block text-xs font-bold text-slate-800 mb-1">
                                     Planned Syllabus Topic
                                 </label>
+
                                 <select
-                                    value={selectedTopicId}
-                                    onChange={(e) => handleTopicDropdownChange(e.target.value)}
+                                    value={
+                                        selectedTopicId
+                                    }
+                                    onChange={(
+                                        event
+                                    ) =>
+                                        handleTopicDropdownChange(
+                                            event
+                                                .target
+                                                .value
+                                        )
+                                    }
                                     className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 bg-slate-50/60 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
                                 >
-                                    <option value="">-- Custom / Unplanned Topic --</option>
-                                    {getCourseTopics(activeSlot.courseId).map((t: any) => (
-                                        <option key={t.id} value={t.id}>
-                                            Unit {t.unitNumber || t.unit || 1} — {t.name || t.title}
-                                        </option>
-                                    ))}
+
+                                    <option value="">
+                                        -- Custom / Unplanned Topic --
+                                    </option>
+
+                                    {getCourseTopics(
+                                        activeSlot.courseId
+                                    ).map(
+                                        (topic) => (
+                                            <option
+                                                key={
+                                                    topic.id
+                                                }
+                                                value={
+                                                    topic.id
+                                                }
+                                            >
+                                                Unit{' '}
+                                                {(
+                                                    topic as typeof topic & {
+                                                        unitNumber?: number;
+                                                        unit?: string;
+                                                    }
+                                                )
+                                                    .unitNumber ||
+                                                    (
+                                                        topic as typeof topic & {
+                                                            unit?: string;
+                                                        }
+                                                    )
+                                                        .unit ||
+                                                    1}{' '}
+                                                —{' '}
+                                                {
+                                                    topic.name ||
+                                                    topic.title
+                                                }
+                                            </option>
+                                        )
+                                    )}
+
                                 </select>
                             </div>
 
+                            {/* ACTUAL TOPIC */}
+
                             <div>
+
                                 <div className="flex items-center justify-between mb-1">
+
                                     <label className="text-xs font-bold text-slate-800">
                                         Topic Actually Covered
                                     </label>
+
                                     <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
                                         Editable for deviations
                                     </span>
+
                                 </div>
+
                                 <input
                                     type="text"
-                                    value={topicCovered}
-                                    onChange={(e) => setTopicCovered(e.target.value)}
+                                    value={
+                                        topicCovered
+                                    }
+                                    onChange={(
+                                        event
+                                    ) =>
+                                        setTopicCovered(
+                                            event
+                                                .target
+                                                .value
+                                        )
+                                    }
                                     placeholder="Detail what was taught today"
                                     required
                                     className="w-full px-3.5 py-2 text-sm font-bold text-slate-900 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-white"
                                 />
+
                             </div>
 
+                            {/* STATUS / ATTENDANCE */}
+
                             <div className="grid grid-cols-2 gap-3">
+
                                 <div>
+
                                     <label className="block text-xs font-bold text-slate-800 mb-1">
                                         Period Status
                                     </label>
+
                                     <select
-                                        value={status}
-                                        onChange={(e) => setStatus(e.target.value)}
+                                        value={
+                                            status
+                                        }
+                                        onChange={(
+                                            event
+                                        ) =>
+                                            setStatus(
+                                                event
+                                                    .target
+                                                    .value as
+                                                    | 'Taken'
+                                                    | 'Compensated'
+                                                    | 'Cancelled'
+                                            )
+                                        }
                                         className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-slate-50/60 font-semibold"
                                     >
-                                        <option value="Taken">Taken</option>
-                                        <option value="Compensated">Compensated</option>
-                                        <option value="Cancelled">Cancelled</option>
+
+                                        <option value="Taken">
+                                            Taken
+                                        </option>
+
+                                        <option value="Compensated">
+                                            Compensated
+                                        </option>
+
+                                        <option value="Cancelled">
+                                            Cancelled
+                                        </option>
+
                                     </select>
                                 </div>
 
                                 <div>
+
                                     <label className="block text-xs font-bold text-slate-800 mb-1">
                                         Attendance Count
                                     </label>
+
                                     <input
                                         type="number"
                                         min="0"
                                         max="200"
-                                        value={attendance}
-                                        onChange={(e) => setAttendance(e.target.value)}
+                                        step="1"
+                                        value={
+                                            attendance
+                                        }
+                                        onChange={(
+                                            event
+                                        ) => {
+                                            setAttendance(
+                                                event
+                                                    .target
+                                                    .value
+                                            );
+                                            setErrorMessage(
+                                                null
+                                            );
+                                        }}
                                         placeholder="e.g. 48"
                                         className="w-full px-3.5 py-2 text-sm font-semibold rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-slate-50/60"
                                     />
+
                                 </div>
+
                             </div>
 
+                            {/* REMARKS */}
+
                             <div>
+
                                 <label className="block text-xs font-bold text-slate-800 mb-1">
                                     Remarks / Deviations (Optional)
                                 </label>
+
                                 <input
                                     type="text"
-                                    value={remarks}
-                                    onChange={(e) => setRemarks(e.target.value)}
+                                    value={
+                                        remarks
+                                    }
+                                    onChange={(
+                                        event
+                                    ) =>
+                                        setRemarks(
+                                            event
+                                                .target
+                                                .value
+                                        )
+                                    }
                                     placeholder="e.g. Extended discussion on student doubts"
                                     className="w-full px-3.5 py-2 text-sm font-medium rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-slate-50/60"
                                 />
+
                             </div>
 
+                            {/* FOOTER */}
+
                             <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+
                                 <button
                                     type="button"
-                                    onClick={() => setActiveSlot(null)}
+                                    onClick={() =>
+                                        setActiveSlot(
+                                            null
+                                        )
+                                    }
                                     className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
                                 >
                                     Cancel
                                 </button>
+
                                 <button
                                     type="submit"
                                     className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition transform active:scale-95"
                                 >
                                     Save to Progress Register
                                 </button>
+
                             </div>
+
                         </form>
                     </div>
                 </div>
             )}
 
-            {/* MODAL: ACADEMIC DATA & BACKUP HUB */}
+            {/* =================================================
+                DATA HUB
+               ================================================= */}
+
             <DataHubModal
                 isOpen={isDataHubOpen}
-                onClose={() => {
-                    setIsDataHubOpen(false);
-                    const latest = load();
-                    if (latest) setD(latest);
-                }}
+                onClose={() =>
+                    setIsDataHubOpen(false)
+                }
             />
+
         </div>
     );
 }

@@ -106,91 +106,58 @@ export default function HolidayPage() {
     }, []);
 
     /* ---------------------------------------------------------
-       PRESET HOLIDAYS
+       PRESET HOLIDAYS (DHE ODISHA 2026 CALENDAR)
     --------------------------------------------------------- */
 
     const handleLoadSampleHolidays = () => {
-        const currentYear = new Date().getFullYear();
         const stamp = Date.now();
 
-        const sampleHolidays = [
-            {
-                id: `h_1_${stamp}`,
-                name: 'Republic Day',
-                date: `${currentYear}-01-26`,
-                type: 'Gazetted Holiday',
-                description: 'National Holiday',
-            },
-            {
-                id: `h_2_${stamp + 1}`,
-                name: 'Maha Shivaratri',
-                date: `${currentYear}-02-15`,
-                type: 'Gazetted Holiday',
-                description: 'Festival Holiday',
-            },
-            {
-                id: `h_3_${stamp + 2}`,
-                name: 'Holi',
-                date: `${currentYear}-03-04`,
-                type: 'Gazetted Holiday',
-                description: 'Festival Holiday',
-            },
-            {
-                id: `h_4_${stamp + 3}`,
-                name: 'Utkal Divas',
-                date: `${currentYear}-04-01`,
-                type: 'Gazetted Holiday',
-                description: 'Odisha State Foundation Day',
-            },
-            {
-                id: `h_5_${stamp + 4}`,
-                name: 'Independence Day',
-                date: `${currentYear}-08-15`,
-                type: 'Gazetted Holiday',
-                description: 'National Holiday',
-            },
-            {
-                id: `h_6_${stamp + 5}`,
-                name: 'Ganesh Puja',
-                date: `${currentYear}-08-27`,
-                type: 'Local / Festival Holiday',
-                description: 'Institutional Celebration & Holiday',
-            },
-            {
-                id: `h_7_${stamp + 6}`,
-                name: 'Gandhi Jayanti',
-                date: `${currentYear}-10-02`,
-                type: 'Gazetted Holiday',
-                description: 'National Holiday',
-            },
-            {
-                id: `h_8_${stamp + 7}`,
-                name: 'Durga Puja / Dussehra Vacation',
-                date: `${currentYear}-10-20`,
-                type: 'Institutional / Vacation Break',
-                description: 'Autumn Vacation',
-            },
-            {
-                id: `h_9_${stamp + 8}`,
-                name: 'Diwali',
-                date: `${currentYear}-11-08`,
-                type: 'Gazetted Holiday',
-                description: 'Festival of Lights',
-            },
-            {
-                id: `h_10_${stamp + 9}`,
-                name: 'Christmas Day',
-                date: `${currentYear}-12-25`,
-                type: 'Gazetted Holiday',
-                description: 'Gazetted Holiday',
-            },
+        const dheHolidays2026 = [
+            { id: `h_1_${stamp}`, name: "New Year's Day", date: '2026-01-01', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_2_${stamp}`, name: 'Makar Sankranti', date: '2026-01-14', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_3_${stamp}`, name: 'Subash Chandra Bose Jayanti / Vir Surendrasai Jayanti / Basanta Panchami', date: '2026-01-23', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_4_${stamp}`, name: 'Republic Day', date: '2026-01-26', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_5_${stamp}`, name: 'Dola Purnima', date: '2026-03-03', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_6_${stamp}`, name: 'Holi', date: '2026-03-04', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_7_${stamp}`, name: 'Id-ul-Fitre', date: '2026-03-21', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_8_${stamp}`, name: 'Shree Rama Navami', date: '2026-03-27', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_9_${stamp}`, name: 'Utkal Divas', date: '2026-04-01', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_10_${stamp}`, name: 'Good Friday', date: '2026-04-03', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_11_${stamp}`, name: 'Maha Visuva Sankranti / Dr. B.R.Ambedkar Jayanti', date: '2026-04-14', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_12_${stamp}`, name: "Buddha Purnima / Pandit Raghunath Murmu's Birthday", date: '2026-05-01', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_13_${stamp}`, name: 'Summer Vacation (Start)', date: '2026-05-07', type: 'Institutional / Vacation Break', description: 'Summer Vacation starts (07.05.2026 to 16.06.2026)' },
+            { id: `h_14_${stamp}`, name: 'Summer Vacation (End)', date: '2026-06-16', type: 'Institutional / Vacation Break', description: 'Summer Vacation ends' },
+            { id: `h_15_${stamp}`, name: 'Muhharram', date: '2026-06-26', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_16_${stamp}`, name: 'Ratha Yatra', date: '2026-07-16', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_17_${stamp}`, name: 'Bahuda Yatra', date: '2026-07-24', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_18_${stamp}`, name: 'Independence Day', date: '2026-08-15', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_19_${stamp}`, name: 'B\'day of Prophet Mohammad', date: '2026-08-26', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_20_${stamp}`, name: 'Jhulana Purnima', date: '2026-08-27', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_21_${stamp}`, name: 'Janmastami', date: '2026-09-04', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_22_${stamp}`, name: 'Ganesh Chaturthi', date: '2026-09-14', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_23_${stamp}`, name: 'Nuakhai', date: '2026-09-15', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_24_${stamp}`, name: 'Day Following Nuakhai', date: '2026-09-16', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_25_${stamp}`, name: 'Gandhi Jayanti', date: '2026-10-02', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_26_${stamp}`, name: 'Puja Vacation (Start)', date: '2026-10-17', type: 'Institutional / Vacation Break', description: 'Puja Vacation starts (17.10.2026 to 26.10.2026)' },
+            { id: `h_27_${stamp}`, name: 'Puja Vacation (End)', date: '2026-10-26', type: 'Institutional / Vacation Break', description: 'Puja Vacation ends' },
+            { id: `h_28_${stamp}`, name: 'Bada Osha', date: '2026-11-23', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_29_${stamp}`, name: 'Rahas Purnima', date: '2026-11-24', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_30_${stamp}`, name: 'Prathamastami', date: '2026-12-01', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_31_${stamp}`, name: 'X-Mass Day', date: '2026-12-25', type: 'Gazetted Holiday', description: 'Common Holiday List' },
+            { id: `h_32_${stamp}`, name: 'Guru Govind Singh Birthday', date: '2026-01-06', type: 'Restricted Holiday', description: 'Optional Holiday List' },
+            { id: `h_33_${stamp}`, name: 'Sabe- Quadar', date: '2026-03-17', type: 'Restricted Holiday', description: 'Optional Holiday List' },
+            { id: `h_34_${stamp}`, name: 'Easter Saturday', date: '2026-04-04', type: 'Restricted Holiday', description: 'Optional Holiday List' },
+            { id: `h_35_${stamp}`, name: 'Birthday of Raja Ram Mohan Ray', date: '2026-05-22', type: 'Restricted Holiday', description: 'Optional Holiday List' },
+            { id: `h_36_${stamp}`, name: 'Foundation Day of Brahmo Samaj', date: '2026-08-20', type: 'Restricted Holiday', description: 'Optional Holiday List' },
+            { id: `h_37_${stamp}`, name: 'Anla Navami', date: '2026-11-18', type: 'Restricted Holiday', description: 'Optional Holiday List' },
+            { id: `h_38_${stamp}`, name: 'Christmas Eve', date: '2026-12-24', type: 'Restricted Holiday', description: 'Optional Holiday List' },
         ];
 
         const existingDates = new Set(
             (data.holidays || []).map((h: any) => h.date)
         );
 
-        const newToAdd = sampleHolidays.filter(
+        const newToAdd = dheHolidays2026.filter(
             (holiday) => !existingDates.has(holiday.date)
         );
 
@@ -207,8 +174,8 @@ export default function HolidayPage() {
 
         setSuccessMsg(
             newToAdd.length
-                ? `${newToAdd.length} preset holidays added to the annual calendar.`
-                : 'The preset holidays are already present in your calendar.'
+                ? `${newToAdd.length} official DHE 2026 holidays populated in your calendar.`
+                : 'The official 2026 holidays are already synced to your calendar.'
         );
 
         setIsAnnualCalendarOpen(true);
@@ -402,7 +369,7 @@ export default function HolidayPage() {
     --------------------------------------------------------- */
 
     return (
-        <div className="mx-auto max-w-7xl space-y-6 pb-16">
+        <div className="mx-auto max-w-7xl space-y-6 pb-16 px-4 sm:px-6 pt-2">
 
             {/* BACK BUTTON */}
 
@@ -462,7 +429,7 @@ export default function HolidayPage() {
                             onClick={() =>
                                 setIsAnnualCalendarOpen(true)
                             }
-                            className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white shadow-sm backdrop-blur transition hover:bg-white/20 active:scale-95"
+                            className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white shadow-sm backdrop-blur transition hover:bg-white/20 active:scale-95 cursor-pointer"
                         >
                             <Calendar className="h-4 w-4 text-amber-300" />
                             Annual Calendar
@@ -471,10 +438,10 @@ export default function HolidayPage() {
                         <button
                             type="button"
                             onClick={handleLoadSampleHolidays}
-                            className="inline-flex items-center gap-2 rounded-xl border border-amber-300/30 bg-amber-500/15 px-4 py-2.5 text-xs font-bold text-amber-100 transition hover:bg-amber-500/25 active:scale-95"
+                            className="inline-flex items-center gap-2 rounded-xl border border-amber-300/30 bg-amber-500/15 px-4 py-2.5 text-xs font-bold text-amber-100 transition hover:bg-amber-500/25 active:scale-95 shadow-sm cursor-pointer"
                         >
                             <Sparkles className="h-4 w-4" />
-                            Load Preset
+                            Load Official 2026 Preset
                         </button>
 
                     </div>
@@ -498,9 +465,9 @@ export default function HolidayPage() {
                         },
                     },
                     {
-                        step: '2. Automatic Routine Pause',
-                        desc: "See today's scheduled classes and how holidays or leaves affect your daily teaching plan.",
-                        href: '/today',
+                        step: '2. Load Official Calendar',
+                        desc: "Use the preset button to instantly populate all 2026 DHE Odisha holidays.",
+                        onClick: handleLoadSampleHolidays,
                     },
                     {
                         step: '3. Inspection & Audit Sync',
@@ -513,7 +480,7 @@ export default function HolidayPage() {
             {/* SUCCESS */}
 
             {successMsg && (
-                <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800 shadow-sm">
+                <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800 shadow-sm animate-in fade-in">
 
                     <div className="flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -525,7 +492,7 @@ export default function HolidayPage() {
                     <button
                         type="button"
                         onClick={() => setSuccessMsg(null)}
-                        className="font-bold text-emerald-700 hover:underline"
+                        className="font-bold text-emerald-700 hover:underline cursor-pointer"
                     >
                         Dismiss
                     </button>
@@ -533,92 +500,77 @@ export default function HolidayPage() {
                 </div>
             )}
 
-            {/* CENTRAL CONTROL AREA */}
+            {/* CENTRAL CONTROL AREA - PERFECTED DESKTOP & MOBILE UX */}
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
 
-            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-
-                    {/* GREEN ADD BUTTON */}
-
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <button
                         type="button"
                         onClick={() => {
                             resetForm();
                             setIsAddModalOpen(true);
                         }}
-                        className="group inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-green-600 px-5 py-3 text-xs font-black uppercase tracking-wide text-white shadow-md shadow-emerald-200 transition hover:-translate-y-0.5 hover:from-emerald-500 hover:to-green-500 hover:shadow-lg active:translate-y-0"
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-green-600 px-6 py-3.5 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-emerald-200 transition hover:-translate-y-0.5 hover:from-emerald-500 hover:to-green-500 hover:shadow-lg active:scale-95 cursor-pointer shrink-0"
                     >
                         <Plus className="h-4 w-4 transition group-hover:rotate-90" />
-                        Add Holiday / Leave
+                        <span>Add Holiday / Leave</span>
                     </button>
 
-                    {/* DIVIDER */}
-
-                    <div className="hidden h-9 w-px bg-slate-200 lg:block" />
-
-                    {/* FILTER BUTTONS */}
-
-                    <div className="flex flex-1 items-center gap-2 overflow-x-auto">
-
-                        <button
-                            type="button"
-                            onClick={() =>
-                                setFilterCategory('All')
-                            }
-                            className={`inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-black transition active:scale-95 ${filterCategory === 'All'
-                                    ? 'bg-slate-900 text-white shadow-md'
-                                    : 'border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                                }`}
-                        >
-                            <Sparkles className="h-3.5 w-3.5" />
-                            All Records
-                            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px]">
-                                {(data.holidays || []).length}
-                            </span>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() =>
-                                setFilterCategory('Holidays')
-                            }
-                            className={`inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-black transition active:scale-95 ${filterCategory === 'Holidays'
-                                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md'
-                                    : 'border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
-                                }`}
-                        >
-                            <SunMedium className="h-3.5 w-3.5" />
-                            Institutional Holidays
-                            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px]">
-                                {holidayCount}
-                            </span>
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() =>
-                                setFilterCategory('Leaves')
-                            }
-                            className={`inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-black transition active:scale-95 ${filterCategory === 'Leaves'
-                                    ? 'bg-gradient-to-r from-blue-700 to-indigo-700 text-white shadow-md'
-                                    : 'border border-indigo-200 bg-indigo-50 text-indigo-900 hover:bg-indigo-100'
-                                }`}
-                        >
-                            <Briefcase className="h-3.5 w-3.5" />
-                            Teacher Leaves
-                            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px]">
-                                {leaveCount}
-                            </span>
-                        </button>
-
-                    </div>
-
-                    <div className="whitespace-nowrap text-xs font-black text-slate-500">
+                    <div className="text-xs font-black text-slate-500 text-left sm:text-right">
                         Showing {filteredEntries.length} records
                     </div>
-
                 </div>
+
+                <div className="border-t border-slate-100 pt-3.5 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <button
+                        type="button"
+                        onClick={() => setFilterCategory('All')}
+                        className={`inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer ${
+                            filterCategory === 'All'
+                                ? 'bg-slate-900 text-white shadow-md ring-2 ring-slate-900/20'
+                                : 'border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                        }`}
+                    >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span>All Records</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${filterCategory === 'All' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                            {(data.holidays || []).length}
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setFilterCategory('Holidays')}
+                        className={`inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer ${
+                            filterCategory === 'Holidays'
+                                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md ring-2 ring-amber-500/20'
+                                : 'border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
+                        }`}
+                    >
+                        <SunMedium className="h-3.5 w-3.5" />
+                        <span>Institutional Holidays</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${filterCategory === 'Holidays' ? 'bg-white/20 text-white' : 'bg-amber-200 text-amber-900'}`}>
+                            {holidayCount}
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setFilterCategory('Leaves')}
+                        className={`inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-xs font-black transition active:scale-95 cursor-pointer ${
+                            filterCategory === 'Leaves'
+                                ? 'bg-gradient-to-r from-blue-700 to-indigo-700 text-white shadow-md ring-2 ring-blue-700/20'
+                                : 'border border-indigo-200 bg-indigo-50 text-indigo-900 hover:bg-indigo-100'
+                        }`}
+                    >
+                        <Briefcase className="h-3.5 w-3.5" />
+                        <span>Teacher Leaves</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${filterCategory === 'Leaves' ? 'bg-white/20 text-white' : 'bg-indigo-200 text-indigo-900'}`}>
+                            {leaveCount}
+                        </span>
+                    </button>
+                </div>
+
             </div>
 
             {/* RECORDS */}
@@ -636,12 +588,12 @@ export default function HolidayPage() {
 
                         <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-slate-500">
                             Add a holiday or teacher leave, or open the
-                            Annual Calendar to manage your academic year's
+                            Annual Calendar to manage your academic year&apos;s
                             holiday list.
                         </p>
                     </div>
 
-                    <div className="flex justify-center gap-2">
+                    <div className="flex justify-center gap-2 flex-wrap">
 
                         <button
                             type="button"
@@ -649,7 +601,7 @@ export default function HolidayPage() {
                                 resetForm();
                                 setIsAddModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-md transition hover:bg-emerald-500"
+                            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-md transition hover:bg-emerald-500 cursor-pointer"
                         >
                             <Plus className="h-4 w-4" />
                             Add First Entry
@@ -660,7 +612,7 @@ export default function HolidayPage() {
                             onClick={() =>
                                 setIsAnnualCalendarOpen(true)
                             }
-                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 cursor-pointer"
                         >
                             <Calendar className="h-4 w-4" />
                             Annual Calendar
@@ -731,7 +683,7 @@ export default function HolidayPage() {
                                                 onClick={() =>
                                                     handleEditEntry(item)
                                                 }
-                                                className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                                                className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 cursor-pointer"
                                                 title="Edit"
                                             >
                                                 <Pencil className="h-3.5 w-3.5" />
@@ -744,7 +696,7 @@ export default function HolidayPage() {
                                                         item.id
                                                     )
                                                 }
-                                                className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                                                className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
                                                 title="Delete"
                                             >
                                                 <Trash2 className="h-3.5 w-3.5" />
@@ -786,14 +738,14 @@ export default function HolidayPage() {
             )}
 
             {/* ---------------------------------------------------------
-               ANNUAL CALENDAR MODAL
+                ANNUAL CALENDAR MODAL
             --------------------------------------------------------- */}
 
             {isAnnualCalendarOpen && (
 
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
 
-                    <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+                    <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-200">
 
                         {/* HEADER */}
 
@@ -822,7 +774,7 @@ export default function HolidayPage() {
                                 onClick={() =>
                                     setIsAnnualCalendarOpen(false)
                                 }
-                                className="rounded-xl p-2 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                                className="rounded-xl p-2 text-slate-400 transition hover:bg-white hover:text-slate-700 cursor-pointer"
                             >
                                 <X className="h-5 w-5" />
                             </button>
@@ -845,15 +797,15 @@ export default function HolidayPage() {
 
                             </div>
 
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap">
 
                                 <button
                                     type="button"
                                     onClick={handleLoadSampleHolidays}
-                                    className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-900 transition hover:bg-amber-100"
+                                    className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-900 transition hover:bg-amber-100 cursor-pointer"
                                 >
                                     <Sparkles className="h-3.5 w-3.5" />
-                                    Load Preset
+                                    Load DHE 2026 Preset
                                 </button>
 
                                 <button
@@ -863,7 +815,7 @@ export default function HolidayPage() {
                                         setIsAnnualCalendarOpen(false);
                                         setIsAddModalOpen(true);
                                     }}
-                                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-500"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-500 cursor-pointer"
                                 >
                                     <Plus className="h-3.5 w-3.5" />
                                     Add Holiday
@@ -888,8 +840,8 @@ export default function HolidayPage() {
                                     </h3>
 
                                     <p className="mx-auto mt-1 max-w-sm text-xs text-slate-500">
-                                        Load the preset calendar or add your
-                                        institution's holidays manually.
+                                        Load the official 2026 preset calendar or add your
+                                        institution&apos;s holidays manually.
                                     </p>
 
                                 </div>
@@ -945,9 +897,7 @@ export default function HolidayPage() {
 
                                                             <p className="text-[10px] font-semibold text-slate-400">
                                                                 {index + 1} of{' '}
-                                                                {
-                                                                    annualHolidays.length
-                                                                }
+                                                                {annualHolidays.length}
                                                             </p>
 
                                                         </div>
@@ -989,7 +939,7 @@ export default function HolidayPage() {
                                                                     item
                                                                 )
                                                             }
-                                                            className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                                                            className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 cursor-pointer"
                                                             title="Edit Holiday"
                                                         >
                                                             <Pencil className="h-3.5 w-3.5" />
@@ -1002,7 +952,7 @@ export default function HolidayPage() {
                                                                     item.id
                                                                 )
                                                             }
-                                                            className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                                                            className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
                                                             title="Delete Holiday"
                                                         >
                                                             <Trash2 className="h-3.5 w-3.5" />
@@ -1034,7 +984,7 @@ export default function HolidayPage() {
                                 onClick={() =>
                                     setIsAnnualCalendarOpen(false)
                                 }
-                                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white transition hover:bg-slate-800 cursor-pointer"
                             >
                                 Done
                             </button>
@@ -1047,14 +997,14 @@ export default function HolidayPage() {
             )}
 
             {/* ---------------------------------------------------------
-               ADD / EDIT MODAL
+                ADD / EDIT MODAL
             --------------------------------------------------------- */}
 
             {isAddModalOpen && (
 
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
 
-                    <div className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+                    <div className="w-full max-w-md overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-150">
 
                         {/* HEADER */}
 
@@ -1080,7 +1030,7 @@ export default function HolidayPage() {
                                     setIsAddModalOpen(false);
                                     resetForm();
                                 }}
-                                className="rounded-xl p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                                className="rounded-xl p-1.5 text-slate-400 transition hover:bg-white hover:text-slate-700 cursor-pointer"
                             >
                                 <X className="h-5 w-5" />
                             </button>
@@ -1260,14 +1210,14 @@ export default function HolidayPage() {
                                         setIsAddModalOpen(false);
                                         resetForm();
                                     }}
-                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100"
+                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100 cursor-pointer"
                                 >
                                     Cancel
                                 </button>
 
                                 <button
                                     type="submit"
-                                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white shadow-md transition hover:bg-emerald-500 active:scale-95"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-black text-white shadow-md transition hover:bg-emerald-500 active:scale-95 cursor-pointer"
                                 >
                                     <CheckCircle2 className="h-4 w-4" />
 

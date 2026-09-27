@@ -8,6 +8,7 @@ import React, {
     useState,
 } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { load, save, ProfPlanData } from '@/lib/store';
 import type { Slot, Course } from '@/lib/types';
@@ -29,10 +30,12 @@ import {
     SlidersHorizontal,
     Layers,
     Trash2,
+    ArrowRight,
+    CalendarDays,
 } from 'lucide-react';
 
 /* =========================================================
-   DAYS
+   DAYS (ALL 7 DAYS: MON TO SUN)
    ========================================================= */
 
 const days = [
@@ -42,6 +45,7 @@ const days = [
     { id: 4, name: 'Thursday', short: 'THU' },
     { id: 5, name: 'Friday', short: 'FRI' },
     { id: 6, name: 'Saturday', short: 'SAT' },
+    { id: 7, name: 'Sunday', short: 'SUN' },
 ];
 
 /* =========================================================
@@ -255,7 +259,7 @@ function Time12Input({
     return (
         <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] gap-1.5">
             <select
-                className="w-full px-2 py-2 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full px-2 py-2 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
                 value={displayHour}
                 onChange={(e) =>
                     update(
@@ -280,7 +284,7 @@ function Time12Input({
             </div>
 
             <select
-                className="w-full px-2 py-2 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full px-2 py-2 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
                 value={safeMinute}
                 onChange={(e) =>
                     update(
@@ -305,7 +309,7 @@ function Time12Input({
             </div>
 
             <select
-                className="w-full px-2 py-2 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full px-2 py-2 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
                 value={period}
                 onChange={(e) =>
                     update(
@@ -399,18 +403,37 @@ function TimetableContent() {
     const [pendingConflict, setPendingConflict] =
         useState<Conflict | null>(null);
 
+    // Warning banner state for class filtering / empty periods check
+    const [filterWarningMsg, setFilterWarningMsg] = useState<string | null>(null);
+
     const formSectionRef =
         useRef<HTMLDivElement | null>(null);
 
-    const today = new Date().getDay();
+    const todayIndex = new Date().getDay();
+    const currentDayId = todayIndex === 0 ? 7 : todayIndex;
 
-    const currentDayId =
-        today >= 1 && today <= 6
-            ? today
-            : 1;
-
-    const [mobileActiveDayId, setMobileActiveDayId] = useState<number>(currentDayId);
+    const [mobileActiveDayId, setMobileActiveDayId] = useState<number>(() => currentDayId);
     const dayTabRefs = useRef<{ [key: number]: HTMLButtonElement | null }>({});
+    const todayColumnRef = useRef<HTMLTableHeaderCellElement | null>(null);
+
+    // Auto-scroll desktop table to focus on today's day column on mount
+    useEffect(() => {
+        if (mounted && todayColumnRef.current) {
+            todayColumnRef.current.scrollIntoView({
+                behavior: 'smooth',
+                inline: 'center',
+                block: 'nearest',
+            });
+        }
+    }, [mounted]);
+
+    function handlePrevMobileDay() {
+        setMobileActiveDayId((prev) => (prev <= 1 ? 7 : prev - 1));
+    }
+
+    function handleNextMobileDay() {
+        setMobileActiveDayId((prev) => (prev >= 7 ? 1 : prev + 1));
+    }
 
     function handleSelectMobileDay(dayId: number) {
         setMobileActiveDayId(dayId);
@@ -454,10 +477,6 @@ function TimetableContent() {
         };
     }, []);
 
-    /* =====================================================
-       OPTIONAL URL CLASS SELECTION
-       ===================================================== */
-
     useEffect(() => {
         if (!mounted) return;
 
@@ -472,10 +491,6 @@ function TimetableContent() {
             setSelectedClassFilterId(classId);
         }
     }, [mounted, searchParams, data.classes]);
-
-    /* =====================================================
-       CLASS HELPERS & DE-DUPLICATION
-       ===================================================== */
 
     const classes = useMemo<ClassRecord[]>(() => {
         const rawClasses = (data.classes || []) as unknown as ClassRecord[];
@@ -529,10 +544,6 @@ function TimetableContent() {
         );
     }
 
-    /* =====================================================
-       FILTERED CLASSES
-       ===================================================== */
-
     const filteredClasses = useMemo(() => {
         let list = [...classes];
         const query = searchQuery.trim().toLowerCase();
@@ -557,10 +568,6 @@ function TimetableContent() {
         return list;
     }, [classes, searchQuery, sortBy]);
 
-    /* =====================================================
-       ACTIVE CLASS SLOTS
-       ===================================================== */
-
     const activeFilteredSlots = useMemo(() => {
         const slots = data.slots || [];
 
@@ -584,8 +591,36 @@ function TimetableContent() {
     }, [data.slots, classes, selectedClassFilterId]);
 
     /* =====================================================
-       AVAILABLE COURSES
+       CLASS FILTER CLICK WITH ZERO-PERIOD WARNING
        ===================================================== */
+
+    function handleSelectClassFilter(clsId: string | null) {
+        setFilterWarningMsg(null);
+
+        if (clsId === null) {
+            setSelectedClassFilterId(null);
+            return;
+        }
+
+        const targetClass = getClassById(clsId);
+        if (!targetClass) {
+            setSelectedClassFilterId(clsId);
+            return;
+        }
+
+        // Check if this class has any assigned periods
+        const classSlots = (data.slots || []).filter((slot) =>
+            slotBelongsToClass(slot, clsId, targetClass.name)
+        );
+
+        if (classSlots.length === 0) {
+            setFilterWarningMsg(
+                `Warning: No periods for "${targetClass.name}" have been added yet. First add periods using the button above!`
+            );
+        }
+
+        setSelectedClassFilterId(clsId);
+    }
 
     const availableCoursesForForm = useMemo<Course[]>(() => {
         const courses = data.courses || [];
@@ -614,10 +649,6 @@ function TimetableContent() {
                 course.semester === targetClass.name
         );
     }, [data.courses, classes, form.classId]);
-
-    /* =====================================================
-       CHRONOLOGICAL TIME WINDOWS
-       ===================================================== */
 
     const chronologicalTimeWindows = useMemo<TimeWindow[]>(() => {
         const source =
@@ -660,10 +691,6 @@ function TimetableContent() {
             (a, b) => timeToMinutes(a.start) - timeToMinutes(b.start)
         );
     }, [activeFilteredSlots, data.slots]);
-
-    /* =====================================================
-       FORM HANDLERS
-       ===================================================== */
 
     function updateForm(
         field: keyof TimetableForm,
@@ -790,7 +817,7 @@ function TimetableContent() {
             classes[0].id;
 
         const targetClass = getClassById(targetClassId);
-        const selectedDay = dayId || 1;
+        const selectedDay = dayId || currentDayId || 1;
 
         const dayString =
             selectedDay === 1 ? 'Monday' :
@@ -1284,7 +1311,7 @@ function TimetableContent() {
     return (
         <div className="space-y-5 pb-16 max-w-7xl mx-auto px-4 sm:px-6 pt-2">
 
-            {/* HERO BANNER WITH COMPACT BACK ACTION */}
+            {/* HERO BANNER WITH INTEGRATED TOOLBAR ACTIONS */}
             <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 p-5 sm:p-7 text-white shadow-xl">
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                     <div>
@@ -1309,76 +1336,15 @@ function TimetableContent() {
                         </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
+                    {/* INTEGRATED SINGLE-LINE ACTION & FILTER TOOLBAR */}
+                    <div className="flex flex-wrap items-center gap-2.5">
                         <button
                             type="button"
-                            onClick={() => {
-                                if (isFormOpen) {
-                                    resetForm();
-                                } else {
-                                    handleOpenNew();
-                                }
-                            }}
-                            className={`inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg transition transform active:scale-95 w-full sm:w-auto ${
-                                isFormOpen
-                                    ? 'bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-600'
-                                    : 'bg-amber-300 hover:bg-amber-400 text-slate-950 ring-4 ring-amber-300/30'
-                            }`}
-                        >
-                            {isFormOpen ? (
-                                <>
-                                    <ChevronUp className="w-4 h-4" />
-                                    Close Form
-                                </>
-                            ) : (
-                                <>
-                                    <Plus className="w-4 h-4 text-slate-950" />
-                                    ADD PERIODS TO TIMETABLE
-                                </>
-                            )}
-                        </button>
-                    </div>
-                </div>
-            </section>
-
-            {/* FILTER DECK */}
-            <div className="rounded-3xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                    <button
-                        type="button"
-                        onClick={() => setIsClassesCardsOpen(!isClassesCardsOpen)}
-                        className="flex items-center gap-2.5 text-left group focus:outline-none"
-                    >
-                        <div className="p-2 bg-blue-100 text-blue-800 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
-                            <Layers className="w-4 h-4" />
-                        </div>
-
-                        <div>
-                            <h3 className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition flex items-center gap-2">
-                                Class Filtering &amp; Selection
-                                {isClassesCardsOpen ? (
-                                    <ChevronUp className="w-4 h-4 text-slate-400" />
-                                ) : (
-                                    <ChevronDown className="w-4 h-4 text-slate-400" />
-                                )}
-                            </h3>
-
-                            <p className="text-[11px] text-slate-500">
-                                {selectedClassFilterId
-                                    ? `Active filter: ${activeSelectedClassObj?.name || ''}`
-                                    : 'Master View (All Classes shown)'} — Click to toggle class cards
-                            </p>
-                        </div>
-                    </button>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setSelectedClassFilterId(null)}
-                            className={`px-4 py-2 rounded-xl text-xs font-black transition ${
+                            onClick={() => handleSelectClassFilter(null)}
+                            className={`px-4 py-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
                                 selectedClassFilterId === null
-                                    ? 'bg-blue-600 text-white shadow-md'
-                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                    ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-400/50'
+                                    : 'bg-white/10 hover:bg-white/20 text-blue-100 border border-white/20 backdrop-blur-sm'
                             }`}
                         >
                             ⭐ All Classes
@@ -1386,11 +1352,21 @@ function TimetableContent() {
 
                         <button
                             type="button"
-                            onClick={() => setIsFilterExpanded(!isFilterExpanded)}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                            onClick={() => setIsClassesCardsOpen(!isClassesCardsOpen)}
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-blue-100 border border-white/20 backdrop-blur-sm transition cursor-pointer"
                         >
-                            <SlidersHorizontal className="w-3.5 h-3.5" />
-                            {isFilterExpanded ? 'Hide Filter' : 'Advanced Filter & Sort'}
+                            <Layers className="w-3.5 h-3.5 text-blue-300" />
+                            {isClassesCardsOpen ? 'Hide Cards' : 'Select Class'}
+                            {isClassesCardsOpen ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />}
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-blue-100 border border-white/20 backdrop-blur-sm transition cursor-pointer"
+                        >
+                            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-300" />
+                            {isFilterExpanded ? 'Hide Search' : 'Search & Sort'}
                         </button>
 
                         <button
@@ -1402,58 +1378,93 @@ function TimetableContent() {
                                     handleOpenNew();
                                 }
                             }}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-slate-900 hover:bg-slate-800 text-white shadow-sm transition"
+                            className={`inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider shadow-lg ring-4 transition transform active:scale-95 cursor-pointer ${
+                                isFormOpen
+                                    ? 'bg-slate-800 text-slate-100 ring-slate-700/50 hover:bg-slate-700'
+                                    : 'bg-amber-300 hover:bg-amber-400 text-slate-950 ring-amber-300/30'
+                            }`}
                         >
-                            <Plus className="w-3.5 h-3.5 text-white" />
-                            Add Periods
+                            {isFormOpen ? (
+                                <>
+                                    <X className="w-4 h-4" />
+                                    <span>CLOSE FORM</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Plus className="w-4 h-4 text-slate-950" />
+                                    <span>ADD PERIODS TO TIMETABLE</span>
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>
 
+                {/* FILTER WARNING BANNER (IF CLASS HAS 0 PERIODS) */}
+                {filterWarningMsg && (
+                    <div className="mt-4 p-3 bg-amber-500/20 border border-amber-300/40 rounded-2xl text-xs text-amber-200 flex items-center justify-between backdrop-blur-sm animate-in fade-in">
+                        <div className="flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0" />
+                            <span className="font-bold">{filterWarningMsg}</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setFilterWarningMsg(null);
+                                handleOpenNew();
+                            }}
+                            className="px-3 py-1 bg-amber-300 text-slate-950 font-black rounded-lg text-[10px] uppercase shadow hover:bg-amber-400 cursor-pointer"
+                        >
+                            + Add Period Now
+                        </button>
+                    </div>
+                )}
+
+                {/* EXPANDABLE SEARCH & SORT PANEL */}
                 {isFilterExpanded && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200 animate-in fade-in">
+                    <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in">
                         <div className="relative">
-                            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                            <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                             <input
                                 type="text"
                                 placeholder="Search classes by name or stream..."
                                 value={searchQuery}
                                 onChange={(event) => setSearchQuery(event.target.value)}
-                                className="w-full pl-9 pr-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                                className="w-full pl-10 pr-4 py-2.5 text-xs font-semibold rounded-xl bg-slate-900/80 border border-white/20 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold text-slate-600 shrink-0">
-                                Sort By:
+                            <span className="text-[11px] font-bold text-blue-200 shrink-0">
+                                Sort Classes:
                             </span>
                             <select
                                 value={sortBy}
                                 onChange={(event) => setSortBy(event.target.value as 'name' | 'stream')}
-                                className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                                className="w-full px-3.5 py-2.5 text-xs font-semibold rounded-xl bg-slate-900/80 border border-white/20 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                             >
-                                <option value="name">Class Name (A-Z)</option>
-                                <option value="stream">Stream / Department</option>
+                                <option value="name" className="bg-slate-900 text-white">Class Name (A-Z)</option>
+                                <option value="stream" className="bg-slate-900 text-white">Stream / Department</option>
                             </select>
                         </div>
                     </div>
                 )}
 
+                {/* EXPANDABLE CLASS CARDS DECK */}
                 {isClassesCardsOpen && (
-                    <div className="pt-2 animate-in fade-in duration-200">
+                    <div className="mt-4 pt-4 border-t border-white/10 animate-in fade-in duration-200">
                         {!hasClasses ? (
-                            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs font-bold text-amber-900 flex items-center justify-between">
+                            <div className="p-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl text-xs font-bold text-amber-200 flex items-center justify-between">
                                 <span>No classes configured yet.</span>
                                 <button
                                     type="button"
                                     onClick={() => setIsAddClassModalOpen(true)}
-                                    className="underline text-blue-600"
+                                    className="underline text-amber-300 font-extrabold hover:text-white cursor-pointer"
                                 >
                                     Setup Classes
                                 </button>
                             </div>
                         ) : filteredClasses.length === 0 ? (
-                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-600">
+                            <div className="p-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl text-xs font-bold text-blue-200">
                                 No class matches your search.
                             </div>
                         ) : (
@@ -1465,9 +1476,10 @@ function TimetableContent() {
                                     return (
                                         <div
                                             key={cls.id}
-                                            className={`group relative overflow-hidden rounded-2xl p-3.5 text-left transition transform hover:-translate-y-0.5 shadow-sm hover:shadow-md ${palette.bg} ${
+                                            onClick={() => handleSelectClassFilter(cls.id)}
+                                            className={`group relative overflow-hidden rounded-2xl p-3.5 text-left transition transform hover:-translate-y-0.5 shadow-sm hover:shadow-md cursor-pointer ${palette.bg} ${
                                                 isSelected
-                                                    ? 'ring-4 ring-blue-900/30 scale-[1.02]'
+                                                    ? 'ring-4 ring-amber-300 scale-[1.02]'
                                                     : 'opacity-90 hover:opacity-100'
                                             }`}
                                         >
@@ -1482,22 +1494,16 @@ function TimetableContent() {
                                                         event.stopPropagation();
                                                         handleDeleteClass(cls.id, cls.name);
                                                     }}
-                                                    className="p-1 rounded-lg bg-black/20 hover:bg-rose-600 text-white transition"
+                                                    className="p-1 rounded-lg bg-black/20 hover:bg-rose-600 text-white transition cursor-pointer"
                                                     title="Delete Class"
                                                 >
                                                     <Trash2 className="w-3 h-3" />
                                                 </button>
                                             </div>
 
-                                            <button
-                                                type="button"
-                                                onClick={() => setSelectedClassFilterId(cls.id)}
-                                                className="w-full text-left focus:outline-none"
-                                            >
-                                                <div className={`text-sm font-black tracking-tight ${palette.text}`}>
-                                                    {cls.name}
-                                                </div>
-                                            </button>
+                                            <div className={`text-sm font-black tracking-tight ${palette.text}`}>
+                                                {cls.name}
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -1505,28 +1511,32 @@ function TimetableContent() {
                         )}
                     </div>
                 )}
-            </div>
+            </section>
 
-            {/* FORM */}
+            {/* FORM WITH BRANDED APNSIR HEADER & SUCCESS FEEDBACK */}
             {isFormOpen && (
                 <section
                     ref={formSectionRef}
                     className="overflow-hidden rounded-3xl border-2 border-blue-600/30 bg-white shadow-lg animate-in fade-in zoom-in-95 duration-150 scroll-mt-6"
                 >
-                    <div className="border-b border-slate-100 bg-slate-50 px-6 py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                            <div className={`p-2 rounded-xl font-black ${
-                                editing ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
-                            }`}>
-                                {editing ? <Edit3 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                    <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 px-6 py-4 text-white flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 p-1 ring-1 ring-white/20">
+                                <Image
+                                    src="/apnsir-logo.png"
+                                    alt="APNSIR Foundation"
+                                    width={32}
+                                    height={32}
+                                    className="max-h-full max-w-full object-contain rounded-full"
+                                    priority
+                                />
                             </div>
-
                             <div>
-                                <h2 className="text-sm font-black text-slate-900">
-                                    {editing ? 'Modify Class Period' : 'Assign Period'}
+                                <h2 className="text-sm font-black text-white">
+                                    {editing ? 'Modify Class Period' : 'Assign Period to Timetable'}
                                 </h2>
-                                <p className="text-[11px] text-slate-500">
-                                    Link subjects and timings to schedule
+                                <p className="text-[10px] text-blue-200">
+                                    APNSIR Foundation • E-Lesson Plan &amp; Progress Register
                                 </p>
                             </div>
                         </div>
@@ -1534,11 +1544,18 @@ function TimetableContent() {
                         <button
                             type="button"
                             onClick={resetForm}
-                            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg"
+                            className="p-1.5 text-white/70 hover:text-white rounded-lg hover:bg-white/10 cursor-pointer"
                         >
                             <X className="w-4 h-4" />
                         </button>
                     </div>
+
+                    {successMsg && (
+                        <div className="mx-6 mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span className="font-bold">{successMsg}</span>
+                        </div>
+                    )}
 
                     {conflictError && (
                         <button
@@ -1569,7 +1586,7 @@ function TimetableContent() {
                                     Target Class / Semester *
                                 </label>
                                 <select
-                                    className="w-full px-3.5 py-2 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                                    className="w-full px-3.5 py-2 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
                                     value={form.classId}
                                     onChange={(event) => updateForm('classId', event.target.value)}
                                     required
@@ -1592,7 +1609,7 @@ function TimetableContent() {
                                     Day of Week *
                                 </label>
                                 <select
-                                    className="w-full px-3.5 py-2 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                                    className="w-full px-3.5 py-2 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
                                     value={form.day}
                                     onChange={(event) => updateForm('day', Number(event.target.value))}
                                 >
@@ -1624,7 +1641,7 @@ function TimetableContent() {
                                     Subject / Paper *
                                 </label>
                                 <select
-                                    className="w-full px-3.5 py-2 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                                    className="w-full px-3.5 py-2 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
                                     value={form.courseId}
                                     onChange={(event) => updateForm('courseId', event.target.value)}
                                     required
@@ -1656,10 +1673,6 @@ function TimetableContent() {
                                     value={form.start}
                                     onChange={(value) => updateForm('start', value)}
                                 />
-                                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-black text-blue-700">
-                                    <Clock className="w-3 h-3" />
-                                    <span>{formatTime12Hour(form.start)}</span>
-                                </div>
                             </div>
 
                             <div>
@@ -1670,10 +1683,6 @@ function TimetableContent() {
                                     value={form.end}
                                     onChange={(value) => updateForm('end', value)}
                                 />
-                                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-black text-blue-700">
-                                    <Clock className="w-3 h-3" />
-                                    <span>{formatTime12Hour(form.end)}</span>
-                                </div>
                             </div>
 
                             <div className="sm:col-span-2 lg:col-span-3">
@@ -1710,14 +1719,14 @@ function TimetableContent() {
                             <button
                                 type="button"
                                 onClick={resetForm}
-                                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                             >
                                 Cancel
                             </button>
 
                             <button
                                 type="submit"
-                                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md"
+                                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer"
                             >
                                 {editing ? 'Update Period' : 'Assign to Timetable'}
                             </button>
@@ -1737,14 +1746,14 @@ function TimetableContent() {
                     <button
                         type="button"
                         onClick={() => setSuccessMsg(null)}
-                        className="text-emerald-700 font-bold hover:underline"
+                        className="text-emerald-700 font-bold hover:underline cursor-pointer"
                     >
                         Dismiss
                     </button>
                 </div>
             )}
 
-            {/* MASTER GRID */}
+            {/* MASTER GRID (ALL 7 DAYS: MON TO SUN) */}
             <section className="overflow-hidden rounded-3xl border border-blue-900/20 bg-white shadow-md">
                 <div className="bg-blue-900 text-white px-6 py-3 flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-2">
@@ -1757,9 +1766,20 @@ function TimetableContent() {
                         </span>
                     </div>
 
-                    <span className="text-[11px] font-bold text-blue-200 bg-blue-950 px-2.5 py-1 rounded-lg">
-                        {activeFilteredSlots.length} Booked Periods
-                    </span>
+                    <div className="flex items-center gap-2">
+                        {chronologicalTimeWindows.length === 0 && (
+                            <button
+                                type="button"
+                                onClick={() => handleOpenNew(currentDayId || 1, '09:00', '09:45')}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-300 hover:bg-amber-400 text-slate-950 text-xs font-black uppercase shadow cursor-pointer"
+                            >
+                                ⚡ Set Initial Time Window
+                            </button>
+                        )}
+                        <span className="text-[11px] font-bold text-blue-200 bg-blue-950 px-2.5 py-1 rounded-lg">
+                            {activeFilteredSlots.length} Booked Periods
+                        </span>
+                    </div>
                 </div>
 
                 {/* MOBILE DAY SELECTOR TABS */}
@@ -1774,7 +1794,7 @@ function TimetableContent() {
                                 ref={(el) => { dayTabRefs.current[day.id] = el; }}
                                 type="button"
                                 onClick={() => handleSelectMobileDay(day.id)}
-                                className={`flex-1 min-w-[76px] py-2 px-3 rounded-xl text-center transition-all font-black text-xs shrink-0 ${
+                                className={`flex-1 min-w-[64px] py-2 px-2 rounded-xl text-center transition-all font-black text-xs shrink-0 cursor-pointer ${
                                     isSelected
                                         ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-400/50 scale-105'
                                         : 'bg-slate-800 text-slate-300 hover:bg-slate-750'
@@ -1789,12 +1809,12 @@ function TimetableContent() {
                 </div>
 
                 <div className="overflow-x-auto">
-                    {/* DESKTOP / TABLET MULTI-COLUMN GRID */}
-                    <div className="hidden md:block w-full min-w-[1100px]">
+                    {/* DESKTOP / TABLET 7-COLUMN GRID (MON TO SUN WITH TODAY FOCUS) */}
+                    <div className="hidden md:block w-full min-w-[1450px]">
                         <table className="w-full table-fixed border-collapse">
                             <thead>
                                 <tr className="border-b-2 border-blue-950 bg-blue-950 text-blue-50">
-                                    <th className="sticky left-0 z-30 w-44 border-r border-blue-900 bg-blue-950 px-4 py-4 text-left">
+                                    <th className="sticky left-0 z-30 w-40 border-r border-blue-900 bg-blue-950 px-3 py-4 text-left">
                                         <div className="text-[10px] font-black uppercase tracking-wider text-blue-200">
                                             Time Window
                                         </div>
@@ -1809,21 +1829,23 @@ function TimetableContent() {
                                         return (
                                             <th
                                                 key={day.id}
-                                                className={`border-r border-blue-900/80 px-3 py-4 text-center ${
+                                                ref={isToday ? todayColumnRef : null}
+                                                className={`border-r border-blue-900/80 px-2 py-4 text-center transition ${
                                                     isToday
-                                                        ? 'bg-blue-900 text-white'
+                                                        ? 'bg-blue-950 ring-2 ring-amber-400 ring-inset shadow-lg'
                                                         : 'bg-blue-950 text-blue-100'
                                                 }`}
                                             >
                                                 <div className="text-[11px] font-black tracking-widest uppercase text-blue-200">
                                                     {day.short}
                                                 </div>
-                                                <div className="mt-0.5 text-sm font-black text-white">
+                                                <div className="mt-0.5 text-sm font-black text-white flex items-center justify-center gap-1.5">
                                                     {day.name}
+                                                    {isToday && <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" title="Today's Active Focus Column" />}
                                                 </div>
                                                 {isToday && (
-                                                    <div className="mt-1 inline-block rounded-full bg-amber-300 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-slate-950">
-                                                        TODAY
+                                                    <div className="mt-1 inline-block rounded-full bg-amber-300 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-slate-950 shadow">
+                                                        TODAY&apos;S FOCUS
                                                     </div>
                                                 )}
                                             </th>
@@ -1833,265 +1855,327 @@ function TimetableContent() {
                             </thead>
 
                             <tbody className="divide-y divide-slate-200">
-                                {chronologicalTimeWindows.map((window, index) => {
-                                    const duration = formatDuration(window.start, window.end);
+                                {chronologicalTimeWindows.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={8} className="py-14 px-6 text-center bg-slate-50/60">
+                                            <div className="max-w-md mx-auto space-y-3">
+                                                <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center mx-auto">
+                                                    <CalendarDays className="w-6 h-6" />
+                                                </div>
+                                                <h3 className="text-base font-black text-slate-900">
+                                                    No Time Windows Configured Yet
+                                                </h3>
+                                                <p className="text-xs text-slate-500">
+                                                    Your weekly timetable is currently empty. Click the button below to define your first period timing and schedule classes across Monday to Sunday.
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleOpenNew(currentDayId || 1, '09:00', '09:45')}
+                                                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider shadow cursor-pointer transition"
+                                                >
+                                                    <Plus className="w-4 h-4" /> Set Initial Time Window &amp; Add Period
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    chronologicalTimeWindows.map((window, index) => {
+                                        const duration = formatDuration(window.start, window.end);
 
-                                    return (
-                                        <tr key={`${window.start}-${window.end}-${index}`}>
-                                            <td
-                                                onClick={() =>
-                                                    handleOpenNew(
-                                                        currentDayId || 1,
+                                        return (
+                                            <tr key={`${window.start}-${window.end}-${index}`}>
+                                                <td
+                                                    onClick={() =>
+                                                        handleOpenNew(
+                                                            currentDayId || 1,
+                                                            window.start,
+                                                            window.end
+                                                        )
+                                                    }
+                                                    className="sticky left-0 z-20 border-r border-slate-200 bg-slate-50 hover:bg-blue-50/60 px-3 py-4 align-top shadow-sm cursor-pointer transition group"
+                                                >
+                                                    <div className="font-black text-xs text-slate-900 flex items-center gap-1 group-hover:text-blue-700">
+                                                        <Clock className="w-3 h-3 text-blue-700 shrink-0" />
+                                                        {formatTimeRange(window.start, window.end)}
+                                                    </div>
+
+                                                    <div className="mt-1 text-[10px] font-bold text-slate-500">
+                                                        {duration}
+                                                    </div>
+
+                                                    <span className="mt-1.5 inline-block text-[9px] font-bold text-blue-600 group-hover:underline">
+                                                        + Add Period
+                                                    </span>
+                                                </td>
+
+                                                {days.map((day) => {
+                                                    const matchingSlots = getSlotsForTimeWindow(
+                                                        day.id,
                                                         window.start,
                                                         window.end
-                                                    )
-                                                }
-                                                className="sticky left-0 z-20 border-r border-slate-200 bg-slate-50 hover:bg-blue-50/60 px-4 py-4 align-top shadow-sm cursor-pointer transition group"
-                                            >
-                                                <div className="font-black text-sm text-slate-900 flex items-center gap-1.5 group-hover:text-blue-700">
-                                                    <Clock className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                                                    {formatTimeRange(window.start, window.end)}
-                                                </div>
+                                                    );
 
-                                                <div className="mt-1 text-[11px] font-bold text-slate-500">
-                                                    {duration}
-                                                </div>
+                                                    const isToday = day.id === currentDayId;
 
-                                                <span className="mt-1.5 inline-block text-[9px] font-bold text-blue-600 group-hover:underline">
-                                                    + Add Period
-                                                </span>
-                                            </td>
+                                                    if (matchingSlots.length === 0) {
+                                                        return (
+                                                            <td
+                                                                key={day.id}
+                                                                onClick={() =>
+                                                                    handleOpenNew(
+                                                                        day.id,
+                                                                        window.start,
+                                                                        window.end
+                                                                    )
+                                                                }
+                                                                className={`border-r border-slate-200 p-2 align-top cursor-pointer group transition ${
+                                                                    isToday ? 'bg-amber-50/20 ring-1 ring-amber-400/30' : 'bg-white'
+                                                                } hover:bg-blue-50/60`}
+                                                            >
+                                                                <div className="flex min-h-[130px] items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 group-hover:border-blue-300 bg-slate-50/40 group-hover:bg-blue-50/50 transition">
+                                                                    <div className="text-center px-1">
+                                                                        <Plus className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-500 mx-auto transition" />
+                                                                        <span className="text-[9px] font-bold text-slate-400 group-hover:text-blue-700 uppercase tracking-wider mt-1 block">
+                                                                            + Tap
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                        );
+                                                    }
 
-                                            {days.map((day) => {
-                                                const matchingSlots = getSlotsForTimeWindow(
-                                                    day.id,
-                                                    window.start,
-                                                    window.end
-                                                );
-
-                                                const isToday = day.id === currentDayId;
-
-                                                if (matchingSlots.length === 0) {
                                                     return (
                                                         <td
                                                             key={day.id}
-                                                            onClick={() =>
-                                                                handleOpenNew(
-                                                                    day.id,
-                                                                    window.start,
-                                                                    window.end
-                                                                )
-                                                            }
-                                                            className={`border-r border-slate-200 p-2.5 align-top cursor-pointer group transition ${
-                                                                isToday ? 'bg-blue-50/40' : 'bg-white'
-                                                            } hover:bg-blue-50/60`}
+                                                            className={`border-r border-slate-200 p-2 align-top ${
+                                                                isToday ? 'bg-amber-50/25 ring-1 ring-amber-400/40' : 'bg-white'
+                                                            }`}
                                                         >
-                                                            <div className="flex min-h-[140px] items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 group-hover:border-blue-300 bg-slate-50/40 group-hover:bg-blue-50/50 transition">
-                                                                <div className="text-center">
-                                                                    <Plus className="w-4 h-4 text-slate-300 group-hover:text-blue-500 mx-auto transition" />
-                                                                    <span className="text-[10px] font-bold text-slate-400 group-hover:text-blue-700 uppercase tracking-wider mt-1 block">
-                                                                        + Tap to schedule
-                                                                    </span>
-                                                                </div>
+                                                            <div className="space-y-2">
+                                                                {matchingSlots.map((slot) => {
+                                                                    const course = getCourse(slot.courseId);
+
+                                                                    return (
+                                                                        <div
+                                                                            key={slot.id}
+                                                                            className="group min-h-[130px] rounded-2xl border border-blue-200 bg-gradient-to-b from-blue-50/80 via-white to-slate-50 p-2.5 shadow-sm hover:shadow-md transition flex flex-col justify-between"
+                                                                        >
+                                                                            <div>
+                                                                                <div className="flex items-start justify-between gap-1">
+                                                                                    <span className="px-1.5 py-0.5 rounded-md bg-blue-950 text-white font-black text-[9px]">
+                                                                                        P {(slot as any).period}
+                                                                                    </span>
+
+                                                                                    {course?.code && (
+                                                                                        <span className="px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-900 font-bold text-[9px]">
+                                                                                            {course.code}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+
+                                                                                <h3 className="mt-1 text-[11px] font-black text-slate-900 leading-tight break-words">
+                                                                                    {course?.name || 'Subject'}
+                                                                                </h3>
+
+                                                                                <div className="mt-1 text-[10px] font-semibold text-slate-600">
+                                                                                    <div className="font-bold text-blue-800 truncate">
+                                                                                        {(slot as any).semesterClass}
+                                                                                    </div>
+
+                                                                                    <div className="text-slate-500 flex items-center gap-1 mt-0.5">
+                                                                                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                                                                        <span className="truncate">{slot.room}</span>
+                                                                                    </div>
+
+                                                                                    {(slot as any).conflictReason && (
+                                                                                        <div
+                                                                                            title={(slot as any).conflictReason}
+                                                                                            className="mt-1 rounded-md bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[8px] font-bold text-amber-800 truncate"
+                                                                                        >
+                                                                                            Conflict override
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+
+                                                                            <div className="mt-2 flex gap-1 border-t border-slate-100 pt-1.5">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => editSlot(slot)}
+                                                                                    className="flex-1 rounded-md border border-blue-200 bg-blue-50/80 py-0.5 text-[10px] font-extrabold text-blue-800 hover:bg-blue-600 hover:text-white transition cursor-pointer"
+                                                                                >
+                                                                                    Edit
+                                                                                </button>
+
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => deleteSlot(slot.id)}
+                                                                                    className="flex-1 rounded-md border border-rose-200 bg-rose-50/80 py-0.5 text-[10px] font-extrabold text-rose-700 hover:bg-rose-600 hover:text-white transition cursor-pointer"
+                                                                                >
+                                                                                    Del
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         </td>
                                                     );
-                                                }
-
-                                                return (
-                                                    <td
-                                                        key={day.id}
-                                                        className={`border-r border-slate-200 p-2.5 align-top ${
-                                                            isToday ? 'bg-blue-50/50' : 'bg-white'
-                                                        }`}
-                                                    >
-                                                        <div className="space-y-2">
-                                                            {matchingSlots.map((slot) => {
-                                                                const course = getCourse(slot.courseId);
-
-                                                                return (
-                                                                    <div
-                                                                        key={slot.id}
-                                                                        className="group min-h-[140px] rounded-2xl border border-blue-200 bg-gradient-to-b from-blue-50/80 via-white to-slate-50 p-3 shadow-sm hover:shadow-md transition flex flex-col justify-between"
-                                                                    >
-                                                                        <div>
-                                                                            <div className="flex items-start justify-between gap-1">
-                                                                                <span className="px-2 py-0.5 rounded-md bg-blue-950 text-white font-black text-[10px]">
-                                                                                    P {(slot as any).period}
-                                                                                </span>
-
-                                                                                {course?.code && (
-                                                                                    <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-900 font-bold text-[10px]">
-                                                                                        {course.code}
-                                                                                    </span>
-                                                                                )}
-                                                                            </div>
-
-                                                                            <h3 className="mt-1.5 text-xs font-black text-slate-900 leading-tight break-words">
-                                                                                {course?.name || 'Subject'}
-                                                                            </h3>
-
-                                                                            <div className="mt-1.5 text-[11px] font-semibold text-slate-600">
-                                                                                <div className="text-[10px] font-bold text-blue-800">
-                                                                                    {(slot as any).semesterClass}
-                                                                                </div>
-
-                                                                                <div className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mt-1">
-                                                                                    <Clock className="w-3 h-3 text-blue-500" />
-                                                                                    {formatTimeRange(slot.start, slot.end)}
-                                                                                </div>
-
-                                                                                <div className="text-slate-500 flex items-center gap-1 mt-0.5">
-                                                                                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                                                                                    {slot.room}
-                                                                                </div>
-
-                                                                                {(slot as any).conflictReason && (
-                                                                                    <div
-                                                                                        title={(slot as any).conflictReason}
-                                                                                        className="mt-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2 py-1 text-[9px] font-bold text-amber-800"
-                                                                                    >
-                                                                                        Conflict override recorded
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
-
-                                                                        <div className="mt-2.5 flex gap-1.5 border-t border-slate-100 pt-2">
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => editSlot(slot)}
-                                                                                className="flex-1 rounded-lg border border-blue-200 bg-blue-50/80 py-1 text-[11px] font-extrabold text-blue-800 hover:bg-blue-600 hover:text-white transition"
-                                                                            >
-                                                                                Edit
-                                                                            </button>
-
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => deleteSlot(slot.id)}
-                                                                                className="flex-1 rounded-lg border border-rose-200 bg-rose-50/80 py-1 text-[11px] font-extrabold text-rose-700 hover:bg-rose-600 hover:text-white transition"
-                                                                            >
-                                                                                Delete
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    </td>
-                                                );
-                                            })}
-                                        </tr>
-                                    );
-                                })}
+                                                })}
+                                            </tr>
+                                        );
+                                    })
+                                )}
                             </tbody>
                         </table>
                     </div>
 
-                    {/* MOBILE SINGLE-DAY FOCUSED VIEW */}
+                    {/* MOBILE SINGLE-DAY FOCUSED VIEW WITH ARROWS */}
                     <div className="block md:hidden p-4 space-y-3 bg-slate-50/50">
+                        <div className="flex items-center justify-between bg-gradient-to-r from-blue-950 via-slate-900 to-blue-950 px-4 py-3 rounded-2xl text-white shadow-md">
+                            <button
+                                type="button"
+                                onClick={handlePrevMobileDay}
+                                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-blue-200 transition active:scale-95 cursor-pointer"
+                                aria-label="Previous Day"
+                            >
+                                <ArrowLeft className="w-4 h-4" />
+                            </button>
+
+                            <div className="text-center">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-blue-300 block">
+                                    {mobileActiveDayId === currentDayId ? '• TODAY FOCUS •' : 'Routine Schedule'}
+                                </span>
+                                <span className="text-base font-black text-white">
+                                    {days.find((d) => d.id === mobileActiveDayId)?.name}
+                                </span>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={handleNextMobileDay}
+                                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-blue-200 transition active:scale-95 cursor-pointer"
+                                aria-label="Next Day"
+                            >
+                                <ArrowRight className="w-4 h-4" />
+                            </button>
+                        </div>
+
                         <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-sm">
                             <div>
                                 <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Viewing Schedule For</span>
-                                <span className="text-base font-black text-blue-950">
+                                <span className="text-sm font-black text-blue-950">
                                     {days.find(d => d.id === mobileActiveDayId)?.name}
                                 </span>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => handleOpenNew(mobileActiveDayId, '09:00', '09:45')}
-                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 text-white font-black text-xs shadow"
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 text-white font-black text-xs shadow cursor-pointer"
                             >
                                 <Plus className="w-4 h-4" /> Add Period
                             </button>
                         </div>
 
-                        {chronologicalTimeWindows.map((window, index) => {
-                            const matchingSlots = getSlotsForTimeWindow(mobileActiveDayId, window.start, window.end);
-                            const duration = formatDuration(window.start, window.end);
+                        {chronologicalTimeWindows.length === 0 ? (
+                            <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center space-y-3">
+                                <p className="text-xs font-bold text-slate-500">No time windows scheduled yet.</p>
+                                <button
+                                    type="button"
+                                    onClick={() => handleOpenNew(mobileActiveDayId, '09:00', '09:45')}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-black uppercase cursor-pointer"
+                                >
+                                    + Schedule First Period
+                                </button>
+                            </div>
+                        ) : (
+                            chronologicalTimeWindows.map((window, index) => {
+                                const matchingSlots = getSlotsForTimeWindow(mobileActiveDayId, window.start, window.end);
+                                const duration = formatDuration(window.start, window.end);
 
-                            return (
-                                <div key={`mob-${index}`} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
-                                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                        <div className="flex items-center gap-2 text-blue-900 font-black text-xs">
-                                            <Clock className="w-3.5 h-3.5 text-blue-600" />
-                                            {formatTimeRange(window.start, window.end)}
-                                            <span className="text-[10px] text-slate-400 font-bold">({duration})</span>
+                                return (
+                                    <div key={`mob-${index}`} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
+                                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                            <div className="flex items-center gap-2 text-blue-900 font-black text-xs">
+                                                <Clock className="w-3.5 h-3.5 text-blue-600" />
+                                                {formatTimeRange(window.start, window.end)}
+                                                <span className="text-[10px] text-slate-400 font-bold">({duration})</span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleOpenNew(mobileActiveDayId, window.start, window.end)}
+                                                className="text-[10px] font-extrabold text-blue-600 hover:underline cursor-pointer"
+                                            >
+                                                + Schedule Here
+                                            </button>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleOpenNew(mobileActiveDayId, window.start, window.end)}
-                                            className="text-[10px] font-extrabold text-blue-600 hover:underline"
-                                        >
-                                            + Schedule Here
-                                        </button>
-                                    </div>
 
-                                    {matchingSlots.length === 0 ? (
-                                        <div
-                                            onClick={() => handleOpenNew(mobileActiveDayId, window.start, window.end)}
-                                            className="py-4 border-2 border-dashed border-slate-200 rounded-xl text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition"
-                                        >
-                                            <span className="text-xs font-bold text-slate-400">+ Tap to schedule class for this slot</span>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            {matchingSlots.map((slot) => {
-                                                const course = getCourse(slot.courseId);
-                                                return (
-                                                    <div
-                                                        key={slot.id}
-                                                        className="rounded-2xl border border-blue-200 bg-gradient-to-b from-blue-50/80 via-white to-slate-50 p-3.5 shadow-sm space-y-2"
-                                                    >
-                                                        <div className="flex items-start justify-between gap-1">
-                                                            <span className="px-2 py-0.5 rounded-md bg-blue-950 text-white font-black text-[10px]">
-                                                                Period {(slot as any).period}
-                                                            </span>
-                                                            {course?.code && (
-                                                                <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-900 font-bold text-[10px]">
-                                                                    {course.code}
+                                        {matchingSlots.length === 0 ? (
+                                            <div
+                                                onClick={() => handleOpenNew(mobileActiveDayId, window.start, window.end)}
+                                                className="py-4 border-2 border-dashed border-slate-200 rounded-xl text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition"
+                                            >
+                                                <span className="text-xs font-bold text-slate-400">+ Tap to schedule class for this slot</span>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {matchingSlots.map((slot) => {
+                                                    const course = getCourse(slot.courseId);
+                                                    return (
+                                                        <div
+                                                            key={slot.id}
+                                                            className="rounded-2xl border border-blue-200 bg-gradient-to-b from-blue-50/80 via-white to-slate-50 p-3.5 shadow-sm space-y-2"
+                                                        >
+                                                            <div className="flex items-start justify-between gap-1">
+                                                                <span className="px-2 py-0.5 rounded-md bg-blue-950 text-white font-black text-[10px]">
+                                                                    Period {(slot as any).period}
                                                                 </span>
-                                                            )}
-                                                        </div>
+                                                                {course?.code && (
+                                                                    <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-900 font-bold text-[10px]">
+                                                                        {course.code}
+                                                                    </span>
+                                                                )}
+                                                            </div>
 
-                                                        <div>
-                                                            <h3 className="text-sm font-black text-slate-900">
-                                                                {course?.name || 'Subject'}
-                                                            </h3>
-                                                            <p className="text-xs font-bold text-blue-800 mt-0.5">
-                                                                {(slot as any).semesterClass}
-                                                            </p>
-                                                            <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-500 mt-1">
-                                                                <span className="flex items-center gap-1">
-                                                                    <MapPin className="w-3 h-3 text-slate-400" /> {slot.room}
-                                                                </span>
+                                                            <div>
+                                                                <h3 className="text-sm font-black text-slate-900">
+                                                                    {course?.name || 'Subject'}
+                                                                </h3>
+                                                                <p className="text-xs font-bold text-blue-800 mt-0.5">
+                                                                    {(slot as any).semesterClass}
+                                                                </p>
+                                                                <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-500 mt-1">
+                                                                    <span className="flex items-center gap-1">
+                                                                        <MapPin className="w-3 h-3 text-slate-400" /> {slot.room}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex gap-2 pt-2 border-t border-slate-100">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => editSlot(slot)}
+                                                                    className="flex-1 rounded-xl border border-blue-200 bg-blue-50 py-1.5 text-xs font-extrabold text-blue-800 hover:bg-blue-600 hover:text-white transition cursor-pointer"
+                                                                >
+                                                                    Edit Period
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => deleteSlot(slot.id)}
+                                                                    className="flex-1 rounded-xl border border-rose-200 bg-rose-50 py-1.5 text-xs font-extrabold text-rose-700 hover:bg-rose-600 hover:text-white transition cursor-pointer"
+                                                                >
+                                                                    Delete
+                                                                </button>
                                                             </div>
                                                         </div>
-
-                                                        <div className="flex gap-2 pt-2 border-t border-slate-100">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => editSlot(slot)}
-                                                                className="flex-1 rounded-xl border border-blue-200 bg-blue-50 py-1.5 text-xs font-extrabold text-blue-800 hover:bg-blue-600 hover:text-white transition"
-                                                            >
-                                                                Edit Period
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => deleteSlot(slot.id)}
-                                                                className="flex-1 rounded-xl border border-rose-200 bg-rose-50 py-1.5 text-xs font-extrabold text-rose-700 hover:bg-rose-600 hover:text-white transition"
-                                                            >
-                                                                Delete
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })
+                        )}
                     </div>
                 </div>
             </section>
@@ -2195,7 +2279,7 @@ function TimetableContent() {
                                     setIsConflictModalOpen(false);
                                     setConflictReason('');
                                 }}
-                                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                             >
                                 Cancel
                             </button>
@@ -2206,7 +2290,7 @@ function TimetableContent() {
                                 onClick={handleProceedAfterConflict}
                                 className={`inline-flex items-center gap-2 px-5 py-2.5 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition transform active:scale-95 ${
                                     conflictReason.trim()
-                                        ? 'bg-blue-600 hover:bg-blue-700'
+                                        ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
                                         : 'bg-slate-300 cursor-not-allowed'
                                 }`}
                             >
@@ -2247,7 +2331,7 @@ function TimetableContent() {
                             <button
                                 type="button"
                                 onClick={() => setIsNoClassWarningOpen(false)}
-                                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                             >
                                 Cancel
                             </button>
@@ -2258,7 +2342,7 @@ function TimetableContent() {
                                     setIsNoClassWarningOpen(false);
                                     setIsAddClassModalOpen(true);
                                 }}
-                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition transform active:scale-95"
+                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition transform active:scale-95 cursor-pointer"
                             >
                                 <Plus className="w-4 h-4" />
                                 Add Class Now
@@ -2292,7 +2376,7 @@ function TimetableContent() {
                             <button
                                 type="button"
                                 onClick={() => setIsAddClassModalOpen(false)}
-                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 cursor-pointer"
                             >
                                 <X className="h-5 w-5" />
                             </button>
@@ -2321,7 +2405,7 @@ function TimetableContent() {
                                 <select
                                     value={newClassStream}
                                     onChange={(event) => setNewClassStream(event.target.value)}
-                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                                 >
                                     <option value="General / Academic">General / Academic</option>
                                     <option value="Arts Stream">Arts Stream</option>
@@ -2336,14 +2420,14 @@ function TimetableContent() {
                                 <button
                                     type="button"
                                     onClick={() => setIsAddClassModalOpen(false)}
-                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                                    className="rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
                                 >
                                     Cancel
                                 </button>
 
                                 <button
                                     type="submit"
-                                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-black uppercase text-white transition hover:bg-blue-700"
+                                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-black uppercase text-white transition hover:bg-blue-700 cursor-pointer"
                                 >
                                     <CheckCircle2 className="h-4 w-4" />
                                     Create Workspace
@@ -2369,7 +2453,7 @@ function TimetableContent() {
                             <button
                                 type="button"
                                 onClick={() => setIsQuickCourseModalOpen(false)}
-                                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
+                                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -2418,14 +2502,14 @@ function TimetableContent() {
                                 <button
                                     type="button"
                                     onClick={() => setIsQuickCourseModalOpen(false)}
-                                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                                 >
                                     Cancel
                                 </button>
 
                                 <button
                                     type="submit"
-                                    className="px-5 py-2.5 bg-blue-950 hover:bg-blue-900 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md"
+                                    className="px-5 py-2.5 bg-blue-950 hover:bg-blue-900 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer"
                                 >
                                     Save Subject
                                 </button>

@@ -23,7 +23,10 @@ import {
     ShieldCheck,
     Sparkles,
     Trash2,
-    UserCheck,
+    User,
+    PhoneCall,
+    Briefcase,
+    Building2,
     Users,
     X,
 } from 'lucide-react';
@@ -60,7 +63,7 @@ const EMPTY_PROFILE: UserProfile = {
     onboarded: false,
 };
 
-const DRAFT_KEY = 'profplan_onboarding_draft_v6';
+const DRAFT_KEY = 'profplan_onboarding_draft_v11';
 
 type TierId = 'primary' | 'upper_primary' | 'secondary' | 'higher_secondary' | 'ug' | 'pg';
 
@@ -158,14 +161,10 @@ export default function OnboardingModal({
     const [step, setStep] = useState<WizardStep>(1);
     const [profile, setProfile] = useState<UserProfile>(EMPTY_PROFILE);
 
-    // Selected tiers (multi-select for composite institutions)
     const [selectedTiers, setSelectedTiers] = useState<TierId[]>(['ug']);
-
-    // Populated classes
     const [assignedClasses, setAssignedClasses] = useState<string[]>([]);
     const [customClassInput, setCustomClassInput] = useState('');
 
-    // Inline edit state
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editingValue, setEditingValue] = useState('');
 
@@ -174,6 +173,7 @@ export default function OnboardingModal({
 
     const customInputRef = useRef<HTMLInputElement | null>(null);
     const editInputRef = useRef<HTMLInputElement | null>(null);
+    const modalBodyRef = useRef<HTMLDivElement | null>(null);
 
 
     /* ========================================================
@@ -186,13 +186,10 @@ export default function OnboardingModal({
                 const savedProfile = loadProfile();
                 const existingData = load();
 
-                // Check whether user already has academic classes or slots created
                 const hasExistingAcademicData =
                     (existingData?.classes && existingData.classes.length > 0) ||
                     (existingData?.slots && existingData.slots.length > 0);
 
-                // IN ALL OTHER CASES: If already onboarded OR has existing classes/slots,
-                // keep the modal closed and do NOT trigger any redirect.
                 if (savedProfile?.onboarded === true || hasExistingAcademicData) {
                     if (!savedProfile?.onboarded && hasExistingAcademicData) {
                         saveProfile({
@@ -205,7 +202,6 @@ export default function OnboardingModal({
                     return;
                 }
 
-                // If genuinely a brand-new user with zero data, open the wizard
                 setProfile(savedProfile || EMPTY_PROFILE);
 
                 try {
@@ -217,7 +213,7 @@ export default function OnboardingModal({
                         if (Array.isArray(parsed.assignedClasses)) setAssignedClasses(parsed.assignedClasses);
                     }
                 } catch {
-                    // Ignore draft load errors
+                    // Ignore
                 }
 
                 setStep(1);
@@ -259,6 +255,12 @@ export default function OnboardingModal({
             editInputRef.current?.select();
         }
     }, [editingIndex]);
+
+    useEffect(() => {
+        if (modalBodyRef.current) {
+            modalBodyRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }, [step]);
 
 
     /* ========================================================
@@ -413,7 +415,7 @@ export default function OnboardingModal({
 
 
     /* ========================================================
-       FINAL SAVE (SUPABASE + LOCAL STORAGE)
+       FINAL SAVE (REDIRECTS TO /TODAY)
     ======================================================== */
 
     const completeSetup = async () => {
@@ -439,7 +441,6 @@ export default function OnboardingModal({
                 onboarded: true,
             };
 
-            // 1. Supabase Sync
             if (supabase) {
                 try {
                     await supabase.from('profiles').upsert(
@@ -458,7 +459,6 @@ export default function OnboardingModal({
                 }
             }
 
-            // 2. Local State Assembly
             const storeData = load();
 
             const existingClasses = (storeData.classes || []).filter(
@@ -523,8 +523,8 @@ export default function OnboardingModal({
             setIsOpen(false);
             onComplete?.(completedProfile);
 
-            // ONLY when the wizard completes successfully, force open at weekly timetable:
-            router.replace('/timetable?setup=1');
+            // Redirect to Today dashboard
+            router.replace('/today?setup=1');
         } catch (err) {
             console.error('ProfPlan finish error:', err);
             setErrorMessage(err instanceof Error ? err.message : 'Unable to complete setup.');
@@ -548,7 +548,7 @@ export default function OnboardingModal({
         >
             <div className="relative flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-[30px] border border-white/40 bg-white shadow-2xl">
                 
-                {/* BRAND HEADER */}
+                {/* 1. ORIGINAL PRESERVED DARK BLUE BRAND HEADER & LOGO */}
                 <div className="relative shrink-0 overflow-hidden bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 px-5 py-4 text-white">
                     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.35),transparent_50%)]" />
 
@@ -610,123 +610,111 @@ export default function OnboardingModal({
                 </div>
 
                 {/* BODY CONTENT AREA */}
-                <div className="min-h-0 flex-1 overflow-y-auto">
+                <div ref={modalBodyRef} className="min-h-0 flex-1 overflow-y-auto">
 
                     {/* ========================================================
                         STEP 1: TEACHER PROFILE
                     ======================================================== */}
                     {step === 1 && (
-                        <div className="px-5 py-6 sm:px-7 sm:py-7">
-                            <StepHeading
-                                icon={<UserCheck className="h-6 w-6" />}
-                                eyebrow="Step 1 of 3"
-                                title="Welcome, Educator! Enter Your Details"
-                                description="Your profile personalises your teaching diary, institutional progress register, and lesson plans."
-                            />
-
-                            {/* HIGHLIGHTED INSTRUCTION CARD */}
-                            <div className="mt-5 rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/90 via-violet-50/50 to-indigo-50/90 p-4 shadow-sm">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
-                                        <Sparkles className="h-4 w-4" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-xs font-black text-indigo-950">
-                                            Instant Personalisation
-                                        </p>
-                                        <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-800">
-                                            Your name, institution, and department will be automatically embedded onto every official Lesson Plan, Progress Diary, and Timetable printout.
-                                        </p>
-                                    </div>
+                        <div className="px-6 py-5 sm:px-8 sm:py-6 space-y-4">
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="space-y-1">
+                                    <h2 className="text-xl sm:text-2xl font-black tracking-tight text-blue-950">
+                                        Welcome, Educator!
+                                    </h2>
+                                </div>
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 ring-1 ring-blue-100 shadow-sm">
+                                    <GraduationCap className="h-6 w-6" />
                                 </div>
                             </div>
 
-                            <div className="mt-5 space-y-4">
-                                <Field label="Full Name" required>
+                            {/* HIGHLIGHTED SUBTITLE CARD */}
+                            <div className="rounded-2xl border-2 border-blue-200 bg-gradient-to-r from-blue-50 via-indigo-50/70 to-blue-50 p-3.5 shadow-xs">
+                                <p className="text-xs font-bold leading-relaxed text-blue-950">
+                                    Enter your details to personalise your teaching diary, institutional progress register, and lesson plans.
+                                </p>
+                            </div>
+
+                            <div className="space-y-3.5">
+                                <SpecimenField icon={<User className="h-4 w-4 text-blue-900" />} label="Full Name" required>
                                     <input
                                         type="text"
                                         autoFocus
                                         value={profile.name}
                                         onChange={(e) => updateProfile('name', e.target.value)}
                                         placeholder="e.g. Dr. Ramesh Chandra Nayak"
-                                        className={inputClass}
+                                        className={specimenInputClass}
                                     />
-                                </Field>
+                                </SpecimenField>
 
-                                <Field label="Phone / WhatsApp Number" required>
+                                <SpecimenField icon={<PhoneCall className="h-4 w-4 text-blue-900" />} label="Phone / WhatsApp Number" required>
                                     <input
                                         type="tel"
                                         maxLength={10}
                                         value={profile.mobile}
                                         onChange={(e) => updateProfile('mobile', e.target.value.replace(/\D/g, ''))}
                                         placeholder="e.g. 9861012345"
-                                        className={inputClass}
+                                        className={specimenInputClass}
                                     />
-                                </Field>
+                                </SpecimenField>
 
-                                <Field label="Designation / Post">
+                                <SpecimenField icon={<Briefcase className="h-4 w-4 text-blue-900" />} label="Designation / Post">
                                     <input
                                         type="text"
                                         value={profile.designation}
                                         onChange={(e) => updateProfile('designation', e.target.value)}
                                         placeholder="e.g. Lecturer / Assistant Professor / Reader / PGT / Headmaster"
-                                        className={inputClass}
+                                        className={specimenInputClass}
                                     />
-                                </Field>
+                                </SpecimenField>
 
-                                <Field label="Institution / College / School Name">
+                                <SpecimenField icon={<Building2 className="h-4 w-4 text-blue-900" />} label="Institution / College / School Name">
                                     <input
                                         type="text"
                                         value={profile.college}
                                         onChange={(e) => updateProfile('college', e.target.value)}
                                         placeholder="e.g. People's College, Buguda"
-                                        className={inputClass}
+                                        className={specimenInputClass}
                                     />
-                                </Field>
+                                </SpecimenField>
 
-                                <Field label="Subject / Department">
+                                <SpecimenField icon={<GraduationCap className="h-4 w-4 text-blue-900" />} label="Subject / Department">
                                     <input
                                         type="text"
                                         value={profile.department}
                                         onChange={(e) => updateProfile('department', e.target.value)}
                                         placeholder="e.g. Odia, English, Botany, Political Science, Physics"
-                                        className={inputClass}
+                                        className={specimenInputClass}
                                     />
-                                </Field>
+                                </SpecimenField>
                             </div>
                         </div>
                     )}
 
                     {/* ========================================================
-                        STEP 2: EDUCATIONAL LEVELS
+                        STEP 2: EDUCATIONAL LEVELS (UNIFORM & NON-REPEATED)
                     ======================================================== */}
                     {step === 2 && (
-                        <div className="px-5 py-6 sm:px-7 sm:py-7">
-                            <StepHeading
-                                icon={<GraduationCap className="h-6 w-6" />}
-                                eyebrow="Step 2 of 3"
-                                title="Which Educational Levels Do You Teach?"
-                                description="Select all categories applicable to you. You can choose multiple levels if you teach composite or combined classes."
-                            />
-
-                            {/* HIGHLIGHTED INSTRUCTION CARD */}
-                            <div className="mt-5 rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/90 via-violet-50/40 to-indigo-50/90 p-4 shadow-sm">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
-                                        <Info className="h-4 w-4" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-xs font-black text-indigo-950">
-                                            Designed for Composite &amp; Standalone Educators
-                                        </p>
-                                        <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-800">
-                                            If you teach in a composite college (taking both <strong>+2 Higher Secondary</strong> and <strong>UG Degree</strong> classes), or school taking both <strong>ME and High School</strong>, select all that apply. We will populate them together!
-                                        </p>
-                                    </div>
+                        <div className="px-5 py-6 sm:px-7 sm:py-7 space-y-4">
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <h2 className="text-lg sm:text-xl font-black leading-tight tracking-tight text-slate-900">
+                                        Which Educational Levels Do You Teach?
+                                    </h2>
+                                </div>
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 shadow-sm">
+                                    <GraduationCap className="h-6 w-6" />
                                 </div>
                             </div>
 
-                            <div className="mt-4 space-y-2.5">
+                            {/* HIGHLIGHTED TREATMENT FOR INSTRUCTION TEXT */}
+                            <div className="rounded-2xl border-2 border-indigo-300 bg-gradient-to-r from-indigo-50 via-violet-50 to-indigo-50 p-4 shadow-sm">
+                                <p className="text-xs font-bold leading-relaxed text-indigo-950">
+                                    Select all categories applicable to you. You can choose multiple levels if you teach composite or combined classes.
+                                </p>
+                            </div>
+
+                            <div className="space-y-2.5 pt-1">
                                 {ODISHA_TIERS.map((tier) => {
                                     const isSelected = selectedTiers.includes(tier.id);
                                     return (
@@ -776,36 +764,29 @@ export default function OnboardingModal({
                     )}
 
                     {/* ========================================================
-                        STEP 3: ASSIGNED CLASSES (WITH INLINE EDIT & DELETE)
+                        STEP 3: ASSIGNED CLASSES (UNIFORM & NON-REPEATED)
                     ======================================================== */}
                     {step === 3 && (
-                        <div className="px-5 py-6 sm:px-7 sm:py-7">
-                            <StepHeading
-                                icon={<Users className="h-6 w-6" />}
-                                eyebrow="Step 3 of 3"
-                                title="Your Assigned Academic Groups"
-                                description="Review, customize, or refine the classes you teach before opening your timetable."
-                            />
-
-                            {/* PROMINENT HIGHLIGHT INSTRUCTION CARD */}
-                            <div className="mt-5 rounded-2xl border-2 border-indigo-300 bg-gradient-to-br from-indigo-50 via-violet-50 to-indigo-50 p-4 shadow-sm">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
-                                        <Sparkles className="h-4 w-4" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-xs font-black text-indigo-950">
-                                            We populated these based on your chosen levels!
-                                        </p>
-                                        <p className="mt-1 text-[11px] leading-relaxed text-indigo-900 font-medium">
-                                            Click the <strong className="font-extrabold text-indigo-700">Pencil icon</strong> to add your stream or section (e.g. change <em>&ldquo;+2 1st Year (XI)&rdquo;</em> to <em>&ldquo;+2 1st Year (Science)&rdquo;</em>). Use the <strong className="font-extrabold text-red-700">Trash icon</strong> to remove any class you do not teach.
-                                        </p>
-                                    </div>
+                        <div className="px-5 py-6 sm:px-7 sm:py-7 space-y-4">
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <h2 className="text-lg sm:text-xl font-black leading-tight tracking-tight text-slate-900">
+                                        Your Assigned Academic Groups
+                                    </h2>
+                                </div>
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 shadow-sm">
+                                    <Users className="h-6 w-6" />
                                 </div>
                             </div>
 
-                            {/* CLASS LIST HEADER CONTROLS */}
-                            <div className="mt-4 flex items-center justify-between">
+                            {/* UPDATED INSTRUCTION CARD (NO SUBTITLE DUPLICATION) */}
+                            <div className="rounded-2xl border-2 border-indigo-300 bg-gradient-to-br from-indigo-50 via-violet-50 to-indigo-50 p-4 shadow-sm">
+                                <p className="text-xs font-bold leading-relaxed text-indigo-950">
+                                    We created the following classes/semesters based on your chosen levels. However you can change the name of classes/semesters and add or delete classes by clicking the edit button and by clicking the delete icon.
+                                </p>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-1">
                                 <span className="text-xs font-black text-slate-700">
                                     {assignedClasses.length} {assignedClasses.length === 1 ? 'Academic Group' : 'Academic Groups'} Configured
                                 </span>
@@ -818,8 +799,7 @@ export default function OnboardingModal({
                                 </button>
                             </div>
 
-                            {/* CLASS CARDS CONTAINER */}
-                            <div className="mt-2.5 max-h-60 overflow-y-auto space-y-2 rounded-2xl border border-slate-200 bg-slate-50/50 p-2.5">
+                            <div className="max-h-60 overflow-y-auto space-y-2 rounded-2xl border border-slate-200 bg-slate-50/50 p-2.5">
                                 {assignedClasses.length === 0 ? (
                                     <div className="py-8 text-center text-xs font-semibold text-slate-400">
                                         No classes remaining. Add your specific class below.
@@ -838,7 +818,6 @@ export default function OnboardingModal({
                                                 }`}
                                             >
                                                 {isEditing ? (
-                                                    /* INLINE EDIT MODE */
                                                     <div className="flex items-center gap-1.5 w-full">
                                                         <input
                                                             ref={editInputRef}
@@ -874,7 +853,6 @@ export default function OnboardingModal({
                                                         </button>
                                                     </div>
                                                 ) : (
-                                                    /* DISPLAY MODE (EDIT + DELETE ACTION BUTTONS) */
                                                     <>
                                                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                                             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-[10px] font-black text-indigo-700">
@@ -885,22 +863,24 @@ export default function OnboardingModal({
                                                             </span>
                                                         </div>
 
-                                                        <div className="flex items-center gap-1 shrink-0">
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            {/* COLOURED EDIT BUTTON */}
                                                             <button
                                                                 type="button"
                                                                 onClick={() => startEditing(idx)}
-                                                                title={`Edit ${className}`}
-                                                                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-indigo-50 hover:text-indigo-700 transition"
+                                                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs transition shadow-xs"
                                                             >
-                                                                <Pencil className="h-3.5 w-3.5" />
+                                                                EDIT
                                                             </button>
+
+                                                            {/* DELETE ICON */}
                                                             <button
                                                                 type="button"
                                                                 onClick={() => removeClass(idx)}
                                                                 title={`Delete ${className}`}
                                                                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 transition"
                                                             >
-                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                                <Trash2 className="h-4 w-4" />
                                                             </button>
                                                         </div>
                                                     </>
@@ -911,8 +891,7 @@ export default function OnboardingModal({
                                 )}
                             </div>
 
-                            {/* ADD CUSTOM / SPECIAL BATCH */}
-                            <div className="mt-3.5">
+                            <div className="pt-1">
                                 <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-500">
                                     Add Special Batch / Custom Class
                                 </label>
@@ -941,23 +920,6 @@ export default function OnboardingModal({
                                     </button>
                                 </div>
                             </div>
-
-                            {/* PROMINENT SYLLABUS ADVISORY CARD */}
-                            <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50/90 to-teal-50/70 p-4 text-left shadow-sm">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-200">
-                                        <BookOpen className="h-4 w-4" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-xs font-black text-emerald-950">
-                                            Next: Subjects &amp; Units in Syllabus Module
-                                        </p>
-                                        <p className="mt-0.5 text-[11px] leading-relaxed text-emerald-900">
-                                            No typing required here! Once setup completes, you can attach specific subjects, chapters, and topics class-wise anytime inside the dedicated <strong>Syllabus Module</strong>.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     )}
 
@@ -973,7 +935,7 @@ export default function OnboardingModal({
                     </div>
                 )}
 
-                {/* BOTTOM NAVIGATION FOOTER */}
+                {/* 2. ORIGINAL PRESERVED BOTTOM FOOTER & SELECT EDUCATIONAL LEVELS BUTTON */}
                 <div className="shrink-0 border-t border-slate-100 bg-white px-5 py-3.5 sm:px-7">
                     <div className="flex items-center gap-2">
                         {step > 1 && (
@@ -1021,7 +983,7 @@ export default function OnboardingModal({
                                     </>
                                 ) : (
                                     <>
-                                        Complete &amp; Launch Timetable <ArrowRight className="h-4 w-4" />
+                                        Complete &amp; Launch Dashboard <ArrowRight className="h-4 w-4" />
                                     </>
                                 )}
                             </button>
@@ -1036,74 +998,46 @@ export default function OnboardingModal({
 
 
 /* ============================================================
-   REUSABLE UI HELPERS
+   REUSABLE UI HELPERS & SPECIMEN STYLING
 ============================================================ */
 
-const inputClass = `
+const specimenInputClass = `
     w-full
     rounded-xl
     border-2
-    border-indigo-200/80
-    bg-indigo-50/20
-    px-4
-    py-3
+    border-slate-200/90
+    bg-slate-50/50
+    px-3.5
+    py-2.5
     text-xs sm:text-sm
     font-semibold
-    text-slate-900
+    text-blue-950
     outline-none
     transition
     placeholder:text-slate-400
-    focus:border-indigo-600
+    focus:border-blue-600
     focus:bg-white
     focus:ring-4
-    focus:ring-indigo-100
+    focus:ring-blue-100
 `;
 
-function StepHeading({
+function SpecimenField({
     icon,
-    eyebrow,
-    title,
-    description,
-}: {
-    icon: React.ReactNode;
-    eyebrow: string;
-    title: string;
-    description: string;
-}) {
-    return (
-        <div className="flex items-start justify-between gap-4">
-            <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">
-                    {eyebrow}
-                </p>
-                <h2 className="mt-1 text-lg sm:text-xl font-black leading-tight tracking-tight text-slate-900">
-                    {title}
-                </h2>
-                <p className="mt-1.5 max-w-md text-xs leading-relaxed text-slate-500">
-                    {description}
-                </p>
-            </div>
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 shadow-sm">
-                {icon}
-            </div>
-        </div>
-    );
-}
-
-function Field({
     label,
     required = false,
     children,
 }: {
+    icon: React.ReactNode;
     label: string;
     required?: boolean;
     children: React.ReactNode;
 }) {
     return (
-        <label className="block">
-            <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                {label}
-                {required && <span className="ml-1 text-red-500">*</span>}
+        <label className="block space-y-1">
+            <span className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-blue-950">
+                {icon}
+                <span>{label}</span>
+                {required && <span className="text-red-500">*</span>}
             </span>
             {children}
         </label>
