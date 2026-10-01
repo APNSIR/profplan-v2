@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import { load, save, type ProfPlanData, type Log } from '@/lib/store';
 import DataHubModal from '@/components/DataHubModal';
@@ -35,12 +36,6 @@ import {
 
 /* =========================================================
    ACADEMIC HIERARCHY
-   ---------------------------------------------------------
-   Deliberately uses word boundaries so:
-
-   Class I   != Class IX
-   Class XI  != Class I
-   Class XII != Class II
    ========================================================= */
 
 function getHierarchyRank(className: string = ''): number {
@@ -126,13 +121,6 @@ function sortClassesByHierarchy(classesList: ProfPlanData['classes']) {
     });
 }
 
-/* =========================================================
-   TODAY-PAGE EXTENDED TYPES
-   ---------------------------------------------------------
-   We intentionally keep these local.
-   No changes to types.ts are required.
-   ========================================================= */
-
 type TodayLog = Log & {
     slotId?: string;
     plannedTopicName?: string;
@@ -157,10 +145,6 @@ type TodaySlot = ProfPlanData['slots'][number] & {
 type TodayHoliday = ProfPlanData['holidays'][number] & {
     type?: string;
 };
-
-/* =========================================================
-   STATUS HELPERS
-   ========================================================= */
 
 type DisplayStatus =
     | 'Taken'
@@ -202,11 +186,7 @@ function getNormalizedStatus(log: TodayLog): DisplayStatus {
 
 function isTeachingCompleted(log: TodayLog): boolean {
     const normalized = getNormalizedStatus(log);
-
-    return (
-        normalized === 'Taken' ||
-        normalized === 'Compensated'
-    );
+    return normalized === 'Taken' || normalized === 'Compensated';
 }
 
 function isCancelledLog(log: TodayLog): boolean {
@@ -215,32 +195,19 @@ function isCancelledLog(log: TodayLog): boolean {
 
 function getStatusLabel(log: TodayLog): string {
     const normalized = getNormalizedStatus(log);
-
     if (normalized === 'Unknown') {
         return log.status || log.legacyStatus || 'Recorded';
     }
-
     return normalized;
 }
 
-/* =========================================================
-   TIME HELPER
-   ========================================================= */
-
 function timeToMinutes(timeStr?: string): number {
     if (!timeStr) return Number.MAX_SAFE_INTEGER;
-
     const value = String(timeStr).trim();
-
     const match = value.match(/^(\d{1,2}):(\d{2})$/);
-
-    if (!match) {
-        return Number.MAX_SAFE_INTEGER;
-    }
-
+    if (!match) return Number.MAX_SAFE_INTEGER;
     const hours = Number(match[1]);
     const minutes = Number(match[2]);
-
     if (
         !Number.isFinite(hours) ||
         !Number.isFinite(minutes) ||
@@ -251,13 +218,8 @@ function timeToMinutes(timeStr?: string): number {
     ) {
         return Number.MAX_SAFE_INTEGER;
     }
-
     return hours * 60 + minutes;
 }
-
-/* =========================================================
-   SAFE ID HELPER
-   ========================================================= */
 
 function createLocalId(prefix: string): string {
     return (
@@ -270,10 +232,12 @@ function createLocalId(prefix: string): string {
 }
 
 /* =========================================================
-   COMPONENT
+   TODAY CONTENT COMPONENT (USES useSearchParams)
    ========================================================= */
 
-export default function TodayPage() {
+function TodayContent() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
     const [mounted, setMounted] = useState(false);
 
     const [d, setD] = useState<ProfPlanData>({
@@ -293,10 +257,6 @@ export default function TodayPage() {
     const [isAddClassModalOpen, setIsAddClassModalOpen] = useState(false);
     const [showOnboarding, setShowOnboarding] = useState(false);
 
-    /* =====================================================
-       ADD CLASS FORM
-       ===================================================== */
-
     const [newClassName, setNewClassName] = useState('');
     const [newClassStream, setNewClassStream] = useState('Arts Stream');
     const [customStreamInput, setCustomStreamInput] = useState('');
@@ -306,19 +266,11 @@ export default function TodayPage() {
 
     const classNameInputRef = useRef<HTMLInputElement>(null);
 
-    /* =====================================================
-       INLINE EDIT
-       ===================================================== */
-
     const [editingClassId, setEditingClassId] = useState<string | null>(null);
     const [editClassNameVal, setEditClassNameVal] = useState('');
     const [editClassStreamVal, setEditClassStreamVal] = useState('');
 
     const editClassInputRef = useRef<HTMLInputElement>(null);
-
-    /* =====================================================
-       QUICK LOG
-       ===================================================== */
 
     const [selectedTopicId, setSelectedTopicId] = useState('');
     const [topicCovered, setTopicCovered] = useState('');
@@ -329,29 +281,23 @@ export default function TodayPage() {
     >('Taken');
 
     const [remarks, setRemarks] = useState('');
-
     const [currentDate, setCurrentDate] = useState(() => new Date());
-
-    /* =====================================================
-       DERIVED LOGS
-       ===================================================== */
 
     const todayLogs = useMemo(
         () => (Array.isArray(d.logs) ? d.logs : []) as TodayLog[],
         [d.logs]
     );
 
-    /* =====================================================
-       LOAD / REFRESH
-       ===================================================== */
-
     useEffect(() => {
         setMounted(true);
+
+        if (searchParams.get('setup') === '1') {
+            // Setup complete query parameter
+        }
 
         const refresh = () => {
             try {
                 const updated = load();
-
                 if (updated) {
                     const normalized: ProfPlanData = {
                         ...updated,
@@ -359,14 +305,11 @@ export default function TodayPage() {
                             updated.classes || []
                         ),
                     };
-
                     setD(normalized);
                 }
             } catch (err) {
                 console.error('Failed to refresh ProfPlan data:', err);
-                setErrorMessage(
-                    'Could not refresh local session data.'
-                );
+                setErrorMessage('Could not refresh local session data.');
             }
         };
 
@@ -391,11 +334,7 @@ export default function TodayPage() {
             window.removeEventListener('storage', refresh);
             window.clearInterval(timer);
         };
-    }, []);
-
-    /* =====================================================
-       ESCAPE KEY FOR MODALS
-       ===================================================== */
+    }, [searchParams]);
 
     useEffect(() => {
         if (!isAddClassModalOpen && !activeSlot) {
@@ -416,21 +355,15 @@ export default function TodayPage() {
         };
 
         window.addEventListener('keydown', handleEscape);
-
         return () => {
             window.removeEventListener('keydown', handleEscape);
         };
     }, [isAddClassModalOpen, activeSlot]);
 
-    /* =====================================================
-       DATE / DAY
-       ===================================================== */
-
     const todayDateStr = useMemo(() => {
         const year = currentDate.getFullYear();
         const month = String(currentDate.getMonth() + 1).padStart(2, '0');
         const day = String(currentDate.getDate()).padStart(2, '0');
-
         return `${year}-${month}-${day}`;
     }, [currentDate]);
 
@@ -446,13 +379,9 @@ export default function TodayPage() {
                 'Thursday',
                 'Friday',
                 'Saturday',
-            ][dayNumber],
+            ][dayNumber] || 'Monday',
         [dayNumber]
     );
-
-    /* =====================================================
-       HOLIDAY
-       ===================================================== */
 
     const todayHoliday = useMemo<TodayHoliday | null>(() => {
         if (!Array.isArray(d.holidays)) {
@@ -461,17 +390,10 @@ export default function TodayPage() {
 
         return (
             (d.holidays.find(
-                (h) => h.date === todayDateStr
+                (h: any) => h.date === todayDateStr
             ) as TodayHoliday) || null
         );
     }, [d.holidays, todayDateStr]);
-
-    /* =====================================================
-       INSTITUTIONAL NON-INSTRUCTIONAL RECORD
-       -----------------------------------------------------
-       We identify these records by classType/classSource,
-       NOT by remarks text.
-       ===================================================== */
 
     const existingSuspensionLog = useMemo<TodayLog | null>(() => {
         return (
@@ -487,10 +409,6 @@ export default function TodayPage() {
         );
     }, [todayLogs, todayDateStr]);
 
-    /* =====================================================
-       SETUP
-       ===================================================== */
-
     const needsSetup = useMemo(() => {
         return !Array.isArray(d.classes) || d.classes.length === 0;
     }, [d.classes]);
@@ -502,13 +420,6 @@ export default function TodayPage() {
             action();
         }
     };
-
-    /* =====================================================
-       ADD CLASS MODAL
-       -----------------------------------------------------
-       Important: this button can bootstrap the workspace.
-       Therefore it opens even when there are zero classes.
-       ===================================================== */
 
     const openAddClassModal = () => {
         setNewClassName('');
@@ -533,17 +444,12 @@ export default function TodayPage() {
         setEditingClassId(null);
     };
 
-    /* =====================================================
-       ADD CLASS
-       ===================================================== */
-
     const handleSaveNewClass = (
         e: FormEvent<HTMLFormElement>
     ) => {
         e.preventDefault();
 
         const className = newClassName.trim();
-
         const resolvedStream =
             newClassStream === 'Other / Custom'
                 ? customStreamInput.trim()
@@ -560,7 +466,7 @@ export default function TodayPage() {
         }
 
         const duplicateExists = (d.classes || []).some(
-            (c) =>
+            (c: any) =>
                 String(c.name || '')
                     .trim()
                     .toLowerCase() === className.toLowerCase() &&
@@ -614,10 +520,6 @@ export default function TodayPage() {
         }
     };
 
-    /* =====================================================
-       EDIT CLASS
-       ===================================================== */
-
     const handleStartEditClass = (
         cls: ProfPlanData['classes'][number]
     ) => {
@@ -642,7 +544,7 @@ export default function TodayPage() {
         }
 
         const duplicateExists = (d.classes || []).some(
-            (c) =>
+            (c: any) =>
                 c.id !== clsId &&
                 String(c.name || '')
                     .trim()
@@ -660,7 +562,7 @@ export default function TodayPage() {
         }
 
         try {
-            const updatedClasses = (d.classes || []).map((c) => {
+            const updatedClasses = (d.classes || []).map((c: any) => {
                 if (c.id === clsId) {
                     return {
                         ...c,
@@ -668,7 +570,6 @@ export default function TodayPage() {
                         stream: trimmedStream,
                     };
                 }
-
                 return c;
             });
 
@@ -697,25 +598,9 @@ export default function TodayPage() {
         }
     };
 
-    /* =====================================================
-       DELETE CLASS
-       -----------------------------------------------------
-       IMPORTANT:
-       Deleting a ClassItem alone leaves orphaned records.
-
-       We therefore remove dependent:
-       - courses
-       - units
-       - topics
-       - timetable slots
-       - logs
-
-       This remains entirely inside TodayPage.
-       ===================================================== */
-
     const handleDeleteClass = (clsId: string) => {
         const classToDelete = (d.classes || []).find(
-            (c) => c.id === clsId
+            (c: any) => c.id === clsId
         );
 
         if (!classToDelete) return;
@@ -734,51 +619,51 @@ export default function TodayPage() {
             const relatedCourseIds = new Set(
                 (d.courses || [])
                     .filter(
-                        (course) =>
+                        (course: any) =>
                             course.classId === clsId
                     )
-                    .map((course) => course.id)
+                    .map((course: any) => course.id)
             );
 
             const relatedUnitIds = new Set(
                 (d.units || [])
-                    .filter((unit) =>
+                    .filter((unit: any) =>
                         relatedCourseIds.has(unit.courseId)
                     )
-                    .map((unit) => unit.id)
+                    .map((unit: any) => unit.id)
             );
 
             const updatedCourses = (d.courses || []).filter(
-                (course) =>
+                (course: any) =>
                     course.classId !== clsId
             );
 
             const updatedUnits = (d.units || []).filter(
-                (unit) =>
+                (unit: any) =>
                     !relatedCourseIds.has(unit.courseId)
             );
 
             const updatedTopics = (d.topics || []).filter(
-                (topic) =>
+                (topic: any) =>
                     !relatedCourseIds.has(topic.courseId || '') &&
                     !relatedUnitIds.has(topic.unitId)
             );
 
             const updatedSlots = (d.slots || []).filter(
-                (slot) =>
+                (slot: any) =>
                     slot.classId !== clsId &&
                     !relatedCourseIds.has(slot.courseId)
             );
 
             const updatedLogs = (d.logs || []).filter(
-                (log) =>
+                (log: any) =>
                     log.classId !== clsId &&
                     !relatedCourseIds.has(log.courseId)
             );
 
             const updatedClasses = sortClassesByHierarchy(
                 (d.classes || []).filter(
-                    (c) => c.id !== clsId
+                    (c: any) => c.id !== clsId
                 )
             );
 
@@ -812,10 +697,6 @@ export default function TodayPage() {
         }
     };
 
-    /* =====================================================
-       TODAY'S TIMETABLE
-       ===================================================== */
-
     const todaySlots = useMemo<TodaySlot[]>(() => {
         if (!Array.isArray(d.slots)) {
             return [];
@@ -835,10 +716,6 @@ export default function TodayPage() {
                     return true;
                 }
 
-                /*
-                 * Legacy / flexible data support.
-                 * Only accept standard 3-character weekday prefixes.
-                 */
                 const knownPrefixes = new Set([
                     'sun',
                     'mon',
@@ -864,10 +741,6 @@ export default function TodayPage() {
             );
     }, [d.slots, dayName]);
 
-    /* =====================================================
-       EXTRA CLASSES
-       ===================================================== */
-
     const todayExtraClasses = useMemo(
         () =>
             todayLogs
@@ -884,10 +757,6 @@ export default function TodayPage() {
                 ),
         [todayLogs, todayDateStr]
     );
-
-    /* =====================================================
-       TODAY COMPLETION
-       ===================================================== */
 
     const completedTodayLogs = useMemo(
         () =>
@@ -939,10 +808,6 @@ export default function TodayPage() {
             ? 100
             : 0;
 
-    /* =====================================================
-       COURSE / TOPIC HELPERS
-       ===================================================== */
-
     const getCourse = (id: string) =>
         (d.courses || []).find(
             (course) => course.id === id
@@ -952,15 +817,6 @@ export default function TodayPage() {
         (d.topics || []).filter(
             (topic) => topic.courseId === courseId
         );
-
-    /* =====================================================
-       RECORD HOLIDAY / SUSPENSION
-       -----------------------------------------------------
-       We do NOT attach the record to a real course.
-
-       The placeholder remains compatible with the existing
-       Log type without changing types.ts.
-       ===================================================== */
 
     const handleRecordNonInstructionalDay = (
         reasonText: string
@@ -989,13 +845,7 @@ export default function TodayPage() {
             const logEntry: TodayLog = {
                 id: createLocalId('log_institutional'),
                 date: todayDateStr,
-
-                /*
-                 * Never borrow a genuine course ID for a
-                 * non-instructional day.
-                 */
                 courseId: 'general_course_placeholder',
-
                 status: 'cancelled',
                 hours: 0,
                 remarks: cleanedReason,
@@ -1035,10 +885,6 @@ export default function TodayPage() {
         }
     };
 
-    /* =====================================================
-       REMOVE HOLIDAY / SUSPENSION RECORD
-       ===================================================== */
-
     const handleRemoveSuspensionLog = () => {
         if (!existingSuspensionLog) return;
 
@@ -1075,10 +921,6 @@ export default function TodayPage() {
         }
     };
 
-    /* =====================================================
-       QUICK LOG OPEN
-       ===================================================== */
-
     const handleOpenQuickLog = (
         slot: TodaySlot
     ) => {
@@ -1106,10 +948,6 @@ export default function TodayPage() {
         setErrorMessage(null);
     };
 
-    /* =====================================================
-       TOPIC CHANGE
-       ===================================================== */
-
     const handleTopicDropdownChange = (
         topicId: string
     ) => {
@@ -1130,10 +968,6 @@ export default function TodayPage() {
         }
     };
 
-    /* =====================================================
-       QUICK LOG SAVE
-       ===================================================== */
-
     const handleSaveQuickLog = (
         e: FormEvent<HTMLFormElement>
     ) => {
@@ -1149,10 +983,6 @@ export default function TodayPage() {
             );
             return;
         }
-
-        /* ---------------------------------------------
-           Attendance validation
-           --------------------------------------------- */
 
         let attendanceValue: number | undefined;
 
@@ -1229,54 +1059,35 @@ export default function TodayPage() {
 
             const newLog: TodayLog = {
                 id: createLocalId('log'),
-
                 date: todayDateStr,
-
                 slotId: activeSlot.id,
-
                 courseId:
                     activeSlot.courseId,
-
                 topicId:
                     selectedTopicId || '',
-
                 plannedTopicName:
                     resolvedPlannedName,
-
                 status: canonicalStatus,
-
                 classSource:
                     'Scheduled Class',
-
                 type:
                     'Regular Lecture',
-
                 actualStart:
                     activeSlot.start,
-
                 actualEnd:
                     activeSlot.end,
-
                 covered:
                     resolvedCovered,
-
                 hours:
                     calculatedHours,
-
                 attendance:
                     attendanceValue,
-
                 remarks:
                     remarks.trim(),
-
                 legacyStatus:
                     status,
             };
 
-            /*
-             * One scheduled period should have one active
-             * quick-log record for the current date.
-             */
             const updatedLogs = todayLogs.filter(
                 (log) =>
                     !(
@@ -1311,10 +1122,6 @@ export default function TodayPage() {
         }
     };
 
-    /* =====================================================
-       UNDO LOG
-       ===================================================== */
-
     const handleUndoLog = (
         slotId: string
     ) => {
@@ -1334,10 +1141,6 @@ export default function TodayPage() {
         if (!confirmed) return;
 
         try {
-            /*
-             * Remove only the relevant scheduled log.
-             * This avoids deleting unrelated records.
-             */
             const updatedLogs = todayLogs.filter(
                 (log) =>
                     log.id !== existingLog.id
@@ -1363,10 +1166,6 @@ export default function TodayPage() {
         }
     };
 
-    /* =====================================================
-       MOUNT GUARD
-       ===================================================== */
-
     if (!mounted) {
         return (
             <div className="flex min-h-[50vh] items-center justify-center">
@@ -1379,10 +1178,6 @@ export default function TodayPage() {
 
     return (
         <div className="space-y-6 pb-16 max-w-7xl mx-auto px-4 sm:px-6">
-
-            {/* =================================================
-                ONBOARDING
-               ================================================= */}
 
             {showOnboarding && (
                 <OnboardingModal
@@ -1413,10 +1208,6 @@ export default function TodayPage() {
                 />
             )}
 
-            {/* =================================================
-                ERROR BANNER
-               ================================================= */}
-
             {errorMessage && (
                 <div
                     role="alert"
@@ -1437,10 +1228,6 @@ export default function TodayPage() {
                     </button>
                 </div>
             )}
-
-            {/* =================================================
-                HERO BANNER
-               ================================================= */}
 
             <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 p-6 md:p-8 text-white shadow-xl">
                 <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-5">
@@ -1507,17 +1294,43 @@ export default function TodayPage() {
                 </div>
             </section>
 
-            {/* =================================================
-                ACTION BUTTONS
-               ================================================= */}
+            {todaySlots.length === 0 && needsSetup === false && (
+                <div className="rounded-3xl border-2 border-dashed border-indigo-200 bg-gradient-to-r from-blue-50 via-indigo-50/50 to-blue-50 p-6 md:p-8 text-center space-y-4 shadow-sm animate-in fade-in">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md">
+                        <CalendarDays className="w-7 h-7" />
+                    </div>
+                    <div>
+                        <h3 className="text-base font-black text-slate-900">
+                            Welcome to ProfPlan! Your Next Logical Step:
+                        </h3>
+                        <p className="text-xs text-slate-600 max-w-md mx-auto mt-1 font-medium">
+                            You have successfully set up your classes. Now, let&apos;s set up your weekly timetable routine so your daily dashboard can display your teaching periods.
+                        </p>
+                    </div>
+                    <div className="pt-1 flex justify-center gap-3 flex-wrap">
+                        <Link
+                            href="/timetable"
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg transition"
+                        >
+                            Set Weekly Timetable Now <ArrowRight className="w-4 h-4" />
+                        </Link>
+                        <Link
+                            href="/syllabus"
+                            className="inline-flex items-center gap-2 px-5 py-3 bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-200 font-extrabold text-xs rounded-2xl transition shadow-xs"
+                        >
+                            Or Review Syllabus Planner
+                        </Link>
+                    </div>
+                </div>
+            )}
 
             <section className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
 
-                    <button
+<button
                         type="button"
-                        onClick={openAddClassModal}
-                        className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left"
+                        onClick={() => router.push('/setup/classes')}
+                        className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left cursor-pointer"
                     >
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-white/20 rounded-xl">
@@ -1535,7 +1348,7 @@ export default function TodayPage() {
                             </div>
                         </div>
 
-                        <Plus className="w-4 h-4 text-blue-200 group-hover:scale-110 transition" />
+                        <ArrowRight className="w-4 h-4 text-blue-200 group-hover:translate-x-1 transition" />
                     </button>
 
                     <button
@@ -1548,7 +1361,7 @@ export default function TodayPage() {
                                 }
                             )
                         }
-                        className="flex items-center justify-between p-4 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left"
+                        className="flex items-center justify-between p-4 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left cursor-pointer"
                     >
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-white/20 rounded-xl">
@@ -1579,7 +1392,7 @@ export default function TodayPage() {
                                 }
                             )
                         }
-                        className="flex items-center justify-between p-4 bg-gradient-to-r from-cyan-600 to-teal-700 hover:from-cyan-700 hover:to-teal-800 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left"
+                        className="flex items-center justify-between p-4 bg-gradient-to-r from-cyan-600 to-teal-700 hover:from-cyan-700 hover:to-teal-800 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left cursor-pointer"
                     >
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-white/20 rounded-xl">
@@ -1610,7 +1423,7 @@ export default function TodayPage() {
                                 }
                             )
                         }
-                        className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left"
+                        className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left cursor-pointer"
                     >
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-white/20 rounded-xl">
@@ -1641,7 +1454,7 @@ export default function TodayPage() {
                                 }
                             )
                         }
-                        className="flex items-center justify-between p-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left"
+                        className="flex items-center justify-between p-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left cursor-pointer"
                     >
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-white/20 rounded-xl">
@@ -1672,7 +1485,7 @@ export default function TodayPage() {
                                 }
                             )
                         }
-                        className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-700 hover:to-fuchsia-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left"
+                        className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-700 hover:to-fuchsia-700 text-white rounded-2xl shadow-md transition transform active:scale-95 group text-left cursor-pointer"
                     >
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-white/20 rounded-xl">
@@ -1695,10 +1508,6 @@ export default function TodayPage() {
 
                 </div>
             </section>
-
-            {/* =================================================
-                METRICS
-               ================================================= */}
 
             <section className="space-y-3">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -1760,10 +1569,6 @@ export default function TodayPage() {
                 </div>
             </section>
 
-            {/* =================================================
-                HOLIDAY ALERT
-               ================================================= */}
-
             {todayHoliday && (
                 <div className="rounded-3xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
 
@@ -1802,7 +1607,7 @@ export default function TodayPage() {
                                 onClick={
                                     handleRemoveSuspensionLog
                                 }
-                                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-sm transition"
+                                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer"
                             >
                                 <Check className="w-4 h-4" />
                                 Holiday Recorded — Undo
@@ -1815,7 +1620,7 @@ export default function TodayPage() {
                                         `Holiday: ${todayHoliday.name}`
                                     )
                                 }
-                                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm transition"
+                                className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer"
                             >
                                 <CalendarDays className="w-4 h-4" />
                                 Record Holiday in Register
@@ -1825,10 +1630,6 @@ export default function TodayPage() {
                     </div>
                 </div>
             )}
-
-            {/* =================================================
-                SUSPENSION / NOTICE
-               ================================================= */}
 
             {existingSuspensionLog &&
                 !todayHoliday && (
@@ -1861,17 +1662,13 @@ export default function TodayPage() {
                             onClick={
                                 handleRemoveSuspensionLog
                             }
-                            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-sm transition"
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer"
                         >
                             <RotateCcw className="w-4 h-4" />
                             Revert Suspension Status
                         </button>
                     </div>
                 )}
-
-            {/* =================================================
-                TODAY'S SCHEDULE
-               ================================================= */}
 
             <section className="space-y-4">
 
@@ -1898,7 +1695,7 @@ export default function TodayPage() {
                                     }
                                 )
                             }
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-extrabold text-white bg-blue-950 hover:bg-blue-900 rounded-xl transition shadow-sm"
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-extrabold text-white bg-blue-950 hover:bg-blue-900 rounded-xl transition shadow-sm cursor-pointer"
                         >
                             <Plus className="w-3.5 h-3.5" />
                             + Add Period for Today
@@ -1935,7 +1732,7 @@ export default function TodayPage() {
                                     }
                                 )
                             }
-                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition"
+                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer"
                         >
                             <Plus className="w-4 h-4" />
                             Set Up Timetable Routine
@@ -2044,10 +1841,6 @@ export default function TodayPage() {
 
                                         </div>
 
-                                        {/* =====================================
-                                            COMPLETED LOG
-                                           ===================================== */}
-
                                         {logEntry &&
                                             isCompleted && (
                                                 <div className="mt-2.5 p-3.5 rounded-2xl bg-white border border-emerald-200 shadow-xs space-y-1.5 text-xs">
@@ -2116,10 +1909,6 @@ export default function TodayPage() {
                                                 </div>
                                             )}
 
-                                        {/* =====================================
-                                            CANCELLED LOG
-                                           ===================================== */}
-
                                         {logEntry &&
                                             isCancelled && (
                                                 <div className="mt-2.5 p-3.5 rounded-2xl bg-white border border-rose-200 shadow-xs space-y-1.5 text-xs">
@@ -2147,10 +1936,6 @@ export default function TodayPage() {
 
                                                 </div>
                                             )}
-
-                                        {/* =====================================
-                                            OTHER / UNKNOWN RECORDED LOG
-                                           ===================================== */}
 
                                         {logEntry &&
                                             !isCompleted &&
@@ -2186,10 +1971,6 @@ export default function TodayPage() {
 
                                     </div>
 
-                                    {/* =========================================
-                                        ACTIONS
-                                       ========================================= */}
-
                                     <div className="flex items-center gap-2 self-end md:self-center">
 
                                         {isRecorded ? (
@@ -2212,7 +1993,7 @@ export default function TodayPage() {
                                                         )
                                                     }
                                                     title="Re-open period"
-                                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-slate-200"
+                                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-slate-200 cursor-pointer"
                                                 >
                                                     <RotateCcw className="w-4 h-4" />
                                                 </button>
@@ -2237,7 +2018,7 @@ export default function TodayPage() {
                                                             slot
                                                         )
                                                     }
-                                                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition"
+                                                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition cursor-pointer"
                                                 >
                                                     <Check className="w-4 h-4" />
                                                     Quick Complete
@@ -2255,10 +2036,6 @@ export default function TodayPage() {
                     </div>
                 )}
             </section>
-
-            {/* =================================================
-                EXTRA / UNSCHEDULED CLASSES
-               ================================================= */}
 
             {todayExtraClasses.length > 0 && (
                 <section className="space-y-3">
@@ -2399,10 +2176,6 @@ export default function TodayPage() {
                 </section>
             )}
 
-            {/* =================================================
-                ADD CLASS MODAL
-               ================================================= */}
-
             {isAddClassModalOpen && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md animate-in fade-in"
@@ -2417,20 +2190,12 @@ export default function TodayPage() {
                         }
                     >
 
-                        {/* =====================================
-                            BRAND HEADER
-                           ===================================== */}
-
                         <div className="relative shrink-0 overflow-hidden bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-950 px-5 py-4 text-white">
-
                             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.35),transparent_50%)]" />
 
                             <div className="relative flex items-center justify-between gap-3">
-
                                 <div className="flex min-w-0 items-center gap-3">
-
                                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 p-1.5 ring-1 ring-white/25 backdrop-blur-sm shadow-inner">
-
                                         <Image
                                             src="/apnsir-logo.png"
                                             alt="APNSIR Foundation"
@@ -2439,13 +2204,10 @@ export default function TodayPage() {
                                             className="max-h-full max-w-full object-contain rounded-full"
                                             priority
                                         />
-
                                     </div>
 
                                     <div className="min-w-0">
-
                                         <div className="flex items-center gap-2">
-
                                             <span className="truncate text-[9px] font-black uppercase tracking-[0.2em] text-indigo-300">
                                                 OdishaTeachers.com
                                             </span>
@@ -2453,7 +2215,6 @@ export default function TodayPage() {
                                             <span className="rounded-full bg-indigo-500/20 px-1.5 py-0.5 text-[8px] font-bold text-indigo-200 ring-1 ring-indigo-400/30">
                                                 APNSIR
                                             </span>
-
                                         </div>
 
                                         <p
@@ -2462,9 +2223,7 @@ export default function TodayPage() {
                                         >
                                             ProfPlan &bull; Academic Workspace Setup
                                         </p>
-
                                     </div>
-
                                 </div>
 
                                 <button
@@ -2472,34 +2231,24 @@ export default function TodayPage() {
                                     onClick={
                                         closeAddClassModal
                                     }
-                                    className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition"
+                                    className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer"
                                     title="Close"
                                     aria-label="Close academic workspace setup"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
-
                             </div>
                         </div>
 
-                        {/* =====================================
-                            MODAL BODY
-                           ===================================== */}
-
                         <div className="overflow-y-auto px-6 py-5 space-y-4">
 
-                            {/* ADVISORY */}
-
                             <div className="rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 via-violet-50/60 to-indigo-50 p-4 shadow-sm">
-
                                 <div className="flex items-start gap-3">
-
                                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
                                         <Info className="h-4 w-4" />
                                     </div>
 
                                     <div className="min-w-0 flex-1">
-
                                         <p className="text-xs font-black text-indigo-950">
                                             Configure Your Classes &amp; Semesters
                                         </p>
@@ -2507,14 +2256,9 @@ export default function TodayPage() {
                                         <p className="mt-0.5 text-[11px] leading-relaxed text-indigo-800 font-medium">
                                             Add all your active academic groups. Once configured, you can easily attach subjects, plan your syllabus, and map your timetable.
                                         </p>
-
                                     </div>
-
                                 </div>
-
                             </div>
-
-                            {/* SUCCESS */}
 
                             {classSaveMessage && (
                                 <div
@@ -2538,10 +2282,7 @@ export default function TodayPage() {
                                 className="space-y-4"
                             >
 
-                                {/* CLASS NAME */}
-
                                 <div>
-
                                     <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">
                                         Class / Semester Name{' '}
                                         <span className="text-rose-500">
@@ -2575,13 +2316,9 @@ export default function TodayPage() {
                                         required
                                         className="w-full rounded-xl border-2 border-indigo-200/80 bg-indigo-50/20 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-600 focus:bg-white focus:ring-4 focus:ring-indigo-100 transition"
                                     />
-
                                 </div>
 
-                                {/* STREAM */}
-
                                 <div>
-
                                     <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">
                                         Stream / Faculty *
                                     </label>
@@ -2618,7 +2355,7 @@ export default function TodayPage() {
                                                 );
                                             }
                                         }}
-                                        className="w-full rounded-xl border-2 border-indigo-200/80 bg-indigo-50/20 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-600 focus:bg-white focus:ring-4 focus:ring-indigo-100 transition"
+                                        className="w-full rounded-xl border-2 border-indigo-200/80 bg-indigo-50/20 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-600 focus:bg-white focus:ring-4 focus:ring-indigo-100 transition cursor-pointer"
                                     >
                                         <option value="Arts Stream">
                                             Arts Stream
@@ -2648,7 +2385,6 @@ export default function TodayPage() {
                                     {newClassStream ===
                                         'Other / Custom' && (
                                         <div className="mt-2.5">
-
                                             <input
                                                 type="text"
                                                 placeholder="Enter Custom Stream Name"
@@ -2675,21 +2411,15 @@ export default function TodayPage() {
                                                 required
                                                 className="w-full rounded-xl border-2 border-indigo-300 bg-indigo-50/40 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-indigo-600 focus:bg-white focus:ring-4 focus:ring-indigo-100 transition"
                                             />
-
                                         </div>
                                     )}
-
                                 </div>
-
-                                {/* EXISTING CLASSES */}
 
                                 {d.classes &&
                                     d.classes.length >
                                         0 && (
                                         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2">
-
                                             <div className="flex items-center justify-between">
-
                                                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
                                                     Already Registered Academic Groups (
                                                     {
@@ -2702,15 +2432,13 @@ export default function TodayPage() {
                                                 <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
                                                     Hierarchy Sorted
                                                 </span>
-
                                             </div>
 
                                             <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
-
                                                 {d.classes.map(
                                                     (
-                                                        cls,
-                                                        index
+                                                        cls: any,
+                                                        index: number
                                                     ) => {
                                                         const isEditing =
                                                             editingClassId ===
@@ -2727,12 +2455,9 @@ export default function TodayPage() {
                                                                         : 'bg-white border-slate-200 shadow-xs hover:border-indigo-200'
                                                                 }`}
                                                             >
-
                                                                 {isEditing ? (
                                                                     <div className="space-y-2 w-full">
-
                                                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-
                                                                             <input
                                                                                 ref={
                                                                                     editClassInputRef
@@ -2771,11 +2496,9 @@ export default function TodayPage() {
                                                                                 placeholder="Stream / Branch"
                                                                                 className="w-full px-3 py-1.5 text-xs font-bold rounded-lg border-2 border-indigo-500 bg-white text-slate-900 outline-none"
                                                                             />
-
                                                                         </div>
 
                                                                         <div className="flex justify-end gap-2 pt-1">
-
                                                                             <button
                                                                                 type="button"
                                                                                 onClick={() =>
@@ -2783,7 +2506,7 @@ export default function TodayPage() {
                                                                                         null
                                                                                     )
                                                                                 }
-                                                                                className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-extrabold rounded-md transition"
+                                                                                className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-extrabold rounded-md transition cursor-pointer"
                                                                             >
                                                                                 Cancel
                                                                             </button>
@@ -2795,19 +2518,15 @@ export default function TodayPage() {
                                                                                         cls.id
                                                                                     )
                                                                                 }
-                                                                                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-md shadow transition"
+                                                                                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-md shadow transition cursor-pointer"
                                                                             >
                                                                                 Save
                                                                             </button>
-
                                                                         </div>
-
                                                                     </div>
                                                                 ) : (
                                                                     <>
-
                                                                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
-
                                                                             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 text-[10px] font-black">
                                                                                 {
                                                                                     index +
@@ -2827,11 +2546,9 @@ export default function TodayPage() {
                                                                                     )
                                                                                 </span>
                                                                             </span>
-
                                                                         </div>
 
-                                                                        <div className="flex items-center gap-1 shrink-0">
-
+                                                                        <div className="flex items-center gap-1.5 shrink-0">
                                                                             <button
                                                                                 type="button"
                                                                                 onClick={() =>
@@ -2839,7 +2556,7 @@ export default function TodayPage() {
                                                                                         cls
                                                                                     )
                                                                                 }
-                                                                                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[11px] tracking-wide uppercase shadow-sm transition"
+                                                                                className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[11px] tracking-wide uppercase shadow-sm transition cursor-pointer"
                                                                                 title="Edit Class Name"
                                                                             >
                                                                                 Edit
@@ -2852,60 +2569,46 @@ export default function TodayPage() {
                                                                                         cls.id
                                                                                     )
                                                                                 }
-                                                                                className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg shrink-0 transition hover:bg-rose-50"
+                                                                                className="text-rose-600 hover:text-rose-800 p-1.5 rounded-lg shrink-0 transition hover:bg-rose-50 cursor-pointer"
                                                                                 title="Delete class"
-                                                                                aria-label={`Delete ${cls.name}`}
                                                                             >
                                                                                 <Trash2 className="w-3.5 h-3.5" />
                                                                             </button>
-
                                                                         </div>
-
                                                                     </>
                                                                 )}
-
                                                             </div>
                                                         );
                                                     }
                                                 )}
-
                                             </div>
                                         </div>
                                     )}
 
-                                {/* FOOTER */}
-
                                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-
                                     <button
                                         type="button"
                                         onClick={
                                             closeAddClassModal
                                         }
-                                        className="px-5 py-3 text-xs font-extrabold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                                        className="px-5 py-3 text-xs font-extrabold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                                     >
                                         Cancel / Done
                                     </button>
 
                                     <button
                                         type="submit"
-                                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-6 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-indigo-200 transition hover:opacity-95"
+                                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 px-6 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-indigo-200 transition hover:opacity-95 cursor-pointer"
                                     >
                                         <Check className="h-4 w-4" />
                                         Save Class
                                     </button>
-
                                 </div>
-
                             </form>
                         </div>
                     </div>
                 </div>
             )}
-
-            {/* =================================================
-                QUICK LOG MODAL
-               ================================================= */}
 
             {activeSlot && (
                 <div
@@ -2920,11 +2623,8 @@ export default function TodayPage() {
                             event.stopPropagation()
                         }
                     >
-
                         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-
                             <div>
-
                                 <h3
                                     id="quick-log-title"
                                     className="text-base font-black text-slate-900"
@@ -2950,7 +2650,6 @@ export default function TodayPage() {
                                     }
                                     )
                                 </p>
-
                             </div>
 
                             <button
@@ -2960,13 +2659,11 @@ export default function TodayPage() {
                                         null
                                     )
                                 }
-                                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+                                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
                                 title="Close"
-                                aria-label="Close quick log"
                             >
                                 <X className="w-5 h-5" />
                             </button>
-
                         </div>
 
                         <form
@@ -2975,11 +2672,7 @@ export default function TodayPage() {
                             }
                             className="space-y-4"
                         >
-
-                            {/* PLANNED TOPIC */}
-
                             <div>
-
                                 <label className="block text-xs font-bold text-slate-800 mb-1">
                                     Planned Syllabus Topic
                                 </label>
@@ -2997,9 +2690,8 @@ export default function TodayPage() {
                                                 .value
                                         )
                                     }
-                                    className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 bg-slate-50/60 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                                    className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 bg-slate-50/60 font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
                                 >
-
                                     <option value="">
                                         -- Custom / Unplanned Topic --
                                     </option>
@@ -3007,7 +2699,7 @@ export default function TodayPage() {
                                     {getCourseTopics(
                                         activeSlot.courseId
                                     ).map(
-                                        (topic) => (
+                                        (topic: any) => (
                                             <option
                                                 key={
                                                     topic.id
@@ -3017,19 +2709,8 @@ export default function TodayPage() {
                                                 }
                                             >
                                                 Unit{' '}
-                                                {(
-                                                    topic as typeof topic & {
-                                                        unitNumber?: number;
-                                                        unit?: string;
-                                                    }
-                                                )
-                                                    .unitNumber ||
-                                                    (
-                                                        topic as typeof topic & {
-                                                            unit?: string;
-                                                        }
-                                                    )
-                                                        .unit ||
+                                                {topic.unitNumber ||
+                                                    topic.unit ||
                                                     1}{' '}
                                                 —{' '}
                                                 {
@@ -3039,16 +2720,11 @@ export default function TodayPage() {
                                             </option>
                                         )
                                     )}
-
                                 </select>
                             </div>
 
-                            {/* ACTUAL TOPIC */}
-
                             <div>
-
                                 <div className="flex items-center justify-between mb-1">
-
                                     <label className="text-xs font-bold text-slate-800">
                                         Topic Actually Covered
                                     </label>
@@ -3056,7 +2732,6 @@ export default function TodayPage() {
                                     <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
                                         Editable for deviations
                                     </span>
-
                                 </div>
 
                                 <input
@@ -3077,15 +2752,10 @@ export default function TodayPage() {
                                     required
                                     className="w-full px-3.5 py-2 text-sm font-bold text-slate-900 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-white"
                                 />
-
                             </div>
 
-                            {/* STATUS / ATTENDANCE */}
-
                             <div className="grid grid-cols-2 gap-3">
-
                                 <div>
-
                                     <label className="block text-xs font-bold text-slate-800 mb-1">
                                         Period Status
                                     </label>
@@ -3106,9 +2776,8 @@ export default function TodayPage() {
                                                     | 'Cancelled'
                                             )
                                         }
-                                        className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-slate-50/60 font-semibold"
+                                        className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-slate-50/60 font-semibold cursor-pointer"
                                     >
-
                                         <option value="Taken">
                                             Taken
                                         </option>
@@ -3120,12 +2789,10 @@ export default function TodayPage() {
                                         <option value="Cancelled">
                                             Cancelled
                                         </option>
-
                                     </select>
                                 </div>
 
                                 <div>
-
                                     <label className="block text-xs font-bold text-slate-800 mb-1">
                                         Attendance Count
                                     </label>
@@ -3153,15 +2820,10 @@ export default function TodayPage() {
                                         placeholder="e.g. 48"
                                         className="w-full px-3.5 py-2 text-sm font-semibold rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-slate-50/60"
                                     />
-
                                 </div>
-
                             </div>
 
-                            {/* REMARKS */}
-
                             <div>
-
                                 <label className="block text-xs font-bold text-slate-800 mb-1">
                                     Remarks / Deviations (Optional)
                                 </label>
@@ -3183,13 +2845,9 @@ export default function TodayPage() {
                                     placeholder="e.g. Extended discussion on student doubts"
                                     className="w-full px-3.5 py-2 text-sm font-medium rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 bg-slate-50/60"
                                 />
-
                             </div>
 
-                            {/* FOOTER */}
-
                             <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
-
                                 <button
                                     type="button"
                                     onClick={() =>
@@ -3197,28 +2855,22 @@ export default function TodayPage() {
                                             null
                                         )
                                     }
-                                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                                 >
                                     Cancel
                                 </button>
 
                                 <button
                                     type="submit"
-                                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition transform active:scale-95"
+                                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition transform active:scale-95 cursor-pointer"
                                 >
                                     Save to Progress Register
                                 </button>
-
                             </div>
-
                         </form>
                     </div>
                 </div>
             )}
-
-            {/* =================================================
-                DATA HUB
-               ================================================= */}
 
             <DataHubModal
                 isOpen={isDataHubOpen}
@@ -3226,7 +2878,26 @@ export default function TodayPage() {
                     setIsDataHubOpen(false)
                 }
             />
-
         </div>
+    );
+}
+
+/* =========================================================
+   DEFAULT PAGE EXPORT WRAPPED IN SUSPENSE BOUNDARY
+   ========================================================= */
+
+export default function TodayPage() {
+    return (
+        <Suspense
+            fallback={
+                <div className="flex min-h-[50vh] items-center justify-center">
+                    <div className="text-sm font-bold text-slate-500 animate-pulse">
+                        Loading Today Dashboard...
+                    </div>
+                </div>
+            }
+        >
+            <TodayContent />
+        </Suspense>
     );
 }

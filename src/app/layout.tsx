@@ -6,10 +6,28 @@ import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
-import OnboardingModal from '@/components/OnboardingModal';
 import HeaderProfileWidget from '@/components/HeaderProfileWidget';
 import { getCurrentAcademicSession } from '@/lib/store';
 import { migrateFromLocalStorageIfNeeded } from '@/lib/migration';
+import { supabase } from '@/lib/supabaseClient';
+
+/**
+ * Lightweight health-check ping to prevent Supabase Free Tier 
+ * project pausing due to 7 days of inactivity.
+ */
+async function pingSupabaseDatabase(): Promise<void> {
+  if (typeof window === 'undefined' || !supabase) return;
+  try {
+    const { error } = await supabase.from('profiles').select('phone', { count: 'exact', head: true });
+    if (error) {
+      console.warn('Supabase health check note:', error.message);
+    } else {
+      console.log('⚡ Supabase project health check active: connection verified.');
+    }
+  } catch (err) {
+    // Fail silently if device is offline
+  }
+}
 
 export default function RootLayout({
   children,
@@ -23,7 +41,10 @@ export default function RootLayout({
     // 1. Run initial migration from localStorage into IndexedDB on mount
     migrateFromLocalStorageIfNeeded();
 
-    // 2. Register Service Worker for Offline PWA Support
+    // 2. Execute Supabase health-check ping to keep project alive
+    pingSupabaseDatabase();
+
+    // 3. Register Service Worker for Offline PWA Support
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker
@@ -60,7 +81,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/apnsir-logo.png" />
 
         {/* Google Identity Services (GIS) Client for Zero-Cost Drive Sync */}
-        <script src="https://accounts.google.com/gsi/client" async defer></script>
+        <script src="https://accounts.gle/gsi/client" async defer></script>
       </head>
 
       <body
@@ -70,9 +91,6 @@ export default function RootLayout({
             : 'min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-blue-600 selection:text-white'
         }
       >
-        {/* FIRST-TIME TEACHER ONBOARDING MODAL - Hidden on Home Page */}
-        {!isHomePage && <OnboardingModal />}
-
         {/* TOP INSTITUTIONAL BRAND & EDUCATOR PROFILE HEADER - Hidden on Home Page */}
         {!isHomePage && (
           <header className="bg-slate-950 text-white border-b border-slate-800 shadow-md sticky top-0 z-40">

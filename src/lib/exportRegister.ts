@@ -3,7 +3,6 @@
 import { load } from './store';
 import { db } from './db';
 
-// Extended type definitions to match dynamic runtime properties
 interface ProgressLogRecord {
     id?: string;
     date?: string;
@@ -19,6 +18,8 @@ interface ProgressLogRecord {
     attendance?: number | string;
     classType?: string;
     remarks?: string;
+    room?: string;
+    customSubjectName?: string;
     [key: string]: unknown;
 }
 
@@ -45,6 +46,7 @@ interface AcademicCourseRecord {
 interface AcademicClassRecord {
     id?: string;
     name?: string;
+    stream?: string;
     [key: string]: unknown;
 }
 
@@ -58,7 +60,7 @@ function escapeCSV(value: unknown): string {
 }
 
 /**
- * Generates an institutional Class Register CSV containing all daily teaching logs.
+ * Generates an institutional Class Register CSV containing Room and Period Timings.
  */
 export async function exportTeachingRegisterCSV(): Promise<void> {
     if (typeof window === 'undefined') return;
@@ -89,10 +91,12 @@ export async function exportTeachingRegisterCSV(): Promise<void> {
             return String(a.actualStart || '00:00').localeCompare(String(b.actualStart || '00:00'));
         });
 
-        // Departmental Headers
+        // Enhanced Departmental Headers with Room & Timings
         const headers = [
             'Date',
-            'Period / Time',
+            'Period',
+            'Timing',
+            'Room No',
             'Class / Semester',
             'Subject / Course',
             'Course Code',
@@ -116,19 +120,22 @@ export async function exportTeachingRegisterCSV(): Promise<void> {
                 ? `${log.actualStart} - ${log.actualEnd}`
                 : (slot?.start && slot?.end ? `${slot.start} - ${slot.end}` : '--');
 
-            const periodLabel = slot?.period ? `P${slot.period} (${timeRange})` : timeRange;
+            const periodLabel = slot?.period ? `Period ${slot.period}` : (log.classSource === 'Extra / Unscheduled Class' ? 'Extra' : 'Special');
+            const roomNumber = log.room || slot?.room || '--';
 
             const row = [
                 log.date || '--',
                 periodLabel,
+                timeRange,
+                roomNumber,
                 log.semester || classObj?.name || course?.semester || 'General',
-                course?.name || 'Non-Instructional / General',
+                course?.name || log.customSubjectName || 'Non-Instructional / General',
                 course?.code || '--',
                 log.plannedTopicName || '--',
                 log.covered || '--',
                 log.status || 'Taken',
                 log.hours !== undefined ? String(log.hours) : '0.75',
-                log.attendance !== undefined ? String(log.attendance) : '--',
+                log.attendance !== undefined && log.attendance !== null ? String(log.attendance) : '--',
                 log.classType || (slot ? 'Regular Scheduled' : 'Extra Session'),
                 log.remarks || ''
             ];

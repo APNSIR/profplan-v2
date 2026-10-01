@@ -28,7 +28,9 @@ import {
     DatabaseBackup,
     Cloud,
     RefreshCw,
-    HelpCircle
+    HelpCircle,
+    MapPin,
+    BarChart3
 } from 'lucide-react';
 
 export default function Reports() {
@@ -549,14 +551,61 @@ export default function Reports() {
                 )}
             </div>
 
-            {/* ACTION CONTROLS & REGISTER TABLE */}
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm space-y-4 sm:space-y-5 print:hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {/* =====================================================
+                PREMIUM SUMMARY METRICS CARDS (PLACED PROMINENTLY UP TOP)
+            ===================================================== */}
+            <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-2 xl:grid-cols-4 print:hidden">
+                <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm hover:shadow-md transition">
+                    <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-500">
+                        Total Records
+                    </span>
+                    <p className="mt-1 text-2xl sm:text-3xl font-black text-slate-950">
+                        {filteredLogs.length}
+                    </p>
+                </div>
+
+                <div className="rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50/60 via-white to-white p-5 shadow-sm hover:shadow-md transition">
+                    <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-emerald-800">
+                        Classes Taken
+                    </span>
+                    <p className="mt-1 text-2xl sm:text-3xl font-black text-emerald-700">
+                        {takenClasses}
+                    </p>
+                </div>
+
+                <div className="rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-50/60 via-white to-white p-5 shadow-sm hover:shadow-md transition">
+                    <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-indigo-800">
+                        Delivered Hours
+                    </span>
+                    <p className="mt-1 text-2xl sm:text-3xl font-black text-indigo-700">
+                        {totalHours.toFixed(2)}
+                    </p>
+                </div>
+
+                <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50/60 via-white to-white p-5 shadow-sm hover:shadow-md transition col-span-2 sm:col-span-1">
+                    <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-amber-800">
+                        Latest Record Date
+                    </span>
+                    <p className="mt-1 text-xl sm:text-2xl font-black text-amber-700 truncate">
+                        {latestDate}
+                    </p>
+                </div>
+            </section>
+
+            {/* =====================================================
+                ELEVATED APNSIR STUDIO PANE FOR ACTION CONTROLS
+            ===================================================== */}
+            <section className="overflow-hidden rounded-3xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/60 via-white to-blue-50/40 p-5 sm:p-7 shadow-xl print:hidden space-y-4">
+                
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100 pb-4">
                     <div>
+                        <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-indigo-100 text-indigo-900 font-black text-[10px] uppercase tracking-wider mb-1">
+                            Compliance Hub
+                        </div>
                         <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900">
                             Teaching Progress Register
                         </h2>
-                        <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                        <p className="text-xs font-semibold text-slate-600 mt-0.5">
                             Inspection-ready records arranged chronologically for academic compliance.
                         </p>
                     </div>
@@ -565,81 +614,83 @@ export default function Reports() {
                         href="/reports/print"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition transform active:scale-95 shrink-0"
+                        className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 hover:opacity-95 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow-lg transition transform active:scale-95 shrink-0"
                     >
                         <Printer className="w-4 h-4 text-amber-400" />
                         A4 Print View (Sign-off Sheet)
                     </Link>
                 </div>
 
-                <div className="flex flex-col gap-3 pt-2 border-t border-slate-100">
+                <div className="flex flex-col gap-3.5 pt-1">
                     <button
                         type="button"
                         onClick={() => setShowFilters(!showFilters)}
-                        className={`w-full inline-flex items-center justify-between px-4 sm:px-5 py-3 rounded-2xl text-xs font-black shadow-sm transition border cursor-pointer ${
+                        className={`w-full inline-flex items-center justify-between px-4 sm:px-5 py-3.5 rounded-2xl text-xs font-black shadow-sm transition border cursor-pointer ${
                             hasActiveFilters
-                                ? 'bg-blue-600 text-white border-blue-700 shadow-blue-200'
-                                : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                                ? 'bg-indigo-600 text-white border-indigo-700 shadow-indigo-200'
+                                : 'bg-white hover:bg-slate-50 text-slate-800 border-indigo-200/80'
                         }`}
                     >
-                        <div className="flex items-center gap-2">
-                            <Filter className="w-4 h-4 text-blue-500" />
+                        <div className="flex items-center gap-2.5">
+                            <div className={`p-1.5 rounded-xl ${hasActiveFilters ? 'bg-white/20' : 'bg-indigo-50 text-indigo-600'}`}>
+                                <Filter className="w-4 h-4" />
+                            </div>
                             <span>Advanced Filter &amp; Sorting</span>
                             {hasActiveFilters && (
-                                <span className="ml-1 px-2 py-0.5 bg-white/25 rounded-full text-[10px]">
-                                    Active
+                                <span className="ml-1 px-2.5 py-0.5 bg-white/25 rounded-full text-[10px]">
+                                    Active Filter
                                 </span>
                             )}
                         </div>
                         {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
 
-                    <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                         <button
                             type="button"
                             onClick={handleExportExcel}
-                            className="inline-flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-2xl shadow-sm transition transform active:scale-95 text-center cursor-pointer"
+                            className="inline-flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-2xl shadow-md transition transform active:scale-95 text-center cursor-pointer whitespace-nowrap"
                         >
-                            <FileSpreadsheet className="w-4 h-4 shrink-0" />
+                            <FileSpreadsheet className="w-4 h-4 shrink-0 text-emerald-100" />
                             <span>Export Excel (.xlsx)</span>
                         </button>
 
                         <button
                             type="button"
                             onClick={handleExportFullComplianceReport}
-                            className="inline-flex items-center justify-center gap-2 px-4 py-3 bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs rounded-2xl shadow-sm transition transform active:scale-95 text-center cursor-pointer"
+                            className="inline-flex items-center justify-center gap-2 px-4 py-3 bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition transform active:scale-95 text-center cursor-pointer whitespace-nowrap"
                         >
-                            <Download className="w-4 h-4 shrink-0" />
+                            <Download className="w-4 h-4 shrink-0 text-teal-100" />
                             <span>Full NAAC Workbook</span>
                         </button>
 
                         <button
                             type="button"
                             onClick={handleExportPDF}
-                            className="inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs rounded-2xl shadow-sm transition transform active:scale-95 text-center cursor-pointer"
+                            className="inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition transform active:scale-95 text-center cursor-pointer whitespace-nowrap"
                         >
-                            <FileText className="w-4 h-4 shrink-0" />
+                            <FileText className="w-4 h-4 shrink-0 text-blue-100" />
                             <span>Save PDF</span>
                         </button>
 
                         <button
                             type="button"
                             onClick={() => setCorrectionMode(!correctionMode)}
-                            className={`inline-flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold rounded-2xl text-white shadow-sm transition transform active:scale-95 text-center cursor-pointer ${
+                            className={`inline-flex items-center justify-center gap-2 px-4 py-3 text-xs font-extrabold rounded-2xl text-white shadow-md transition transform active:scale-95 text-center cursor-pointer whitespace-nowrap ${
                                 correctionMode
                                     ? 'bg-amber-600 hover:bg-amber-700 ring-2 ring-amber-400'
-                                    : 'bg-rose-600 hover:bg-rose-700'
+                                    : 'bg-indigo-950 hover:bg-indigo-900 border border-indigo-400/30'
                             }`}
                         >
-                            <Settings2 className="w-4 h-4 shrink-0" />
-                            <span>{correctionMode ? '✓ Done' : 'Manage Logs'}</span>
+                            <Settings2 className="w-4 h-4 shrink-0 text-indigo-300" />
+                            <span>{correctionMode ? '✓ Done Managing' : 'Manage Logs'}</span>
                         </button>
                     </div>
                 </div>
 
                 {/* FILTER PANEL */}
                 {showFilters && (
-                    <div className="pt-3 border-t border-slate-100 space-y-4 animate-in fade-in">
+                    <div className="pt-4 border-t border-indigo-100 space-y-4 animate-in fade-in">
                         <div className="flex items-center justify-between">
                             <span className="text-xs font-black uppercase tracking-wider text-slate-700">
                                 Filter Parameters
@@ -671,7 +722,7 @@ export default function Reports() {
                                     type="date"
                                     value={startDate}
                                     onChange={(e) => setStartDate(e.target.value)}
-                                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-600"
+                                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-600"
                                 />
                             </div>
 
@@ -683,7 +734,7 @@ export default function Reports() {
                                     type="date"
                                     value={endDate}
                                     onChange={(e) => setEndDate(e.target.value)}
-                                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-600"
+                                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-600"
                                 />
                             </div>
 
@@ -694,7 +745,7 @@ export default function Reports() {
                                 <select
                                     value={selectedCourseId}
                                     onChange={(e) => setSelectedCourseId(e.target.value)}
-                                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-600 cursor-pointer"
+                                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-600 cursor-pointer"
                                 >
                                     <option value="ALL">All Courses</option>
                                     {courses.map((c: any) => (
@@ -712,7 +763,7 @@ export default function Reports() {
                                 <select
                                     value={selectedSemester}
                                     onChange={(e) => setSelectedSemester(e.target.value)}
-                                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-600 cursor-pointer"
+                                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-600 cursor-pointer"
                                 >
                                     <option value="ALL">All Classes / Semesters</option>
                                     {semesters.map((sem: string) => (
@@ -730,7 +781,7 @@ export default function Reports() {
                                 <select
                                     value={selectedStatus}
                                     onChange={(e) => setSelectedStatus(e.target.value)}
-                                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-600 cursor-pointer"
+                                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-blue-600 cursor-pointer"
                                 >
                                     <option value="ALL">All Statuses</option>
                                     <option value="Taken">Taken</option>
@@ -743,7 +794,7 @@ export default function Reports() {
                             </div>
                         </div>
 
-                        <div className="text-xs text-slate-500 font-medium">
+                        <div className="text-xs text-slate-600 font-bold">
                             Showing filtered results ({filteredLogs.length} matching records)
                         </div>
                     </div>
@@ -866,11 +917,11 @@ export default function Reports() {
                                                         }`}
                                                     >
                                                         <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                                                            <div className="flex items-center gap-1.5 text-xs font-black text-blue-900">
+                                                            <div className="flex items-center gap-1.5 text-xs font-black text-blue-950">
                                                                 <Clock className="w-3.5 h-3.5 text-blue-600" />
                                                                 {slot?.period ? `Period ${slot.period}` : l.classType || 'Extra Class'}
                                                                 {(l.actualStart || slot?.start) && (
-                                                                    <span className="text-slate-400 font-medium">
+                                                                    <span className="text-slate-500 font-bold">
                                                                         ({l.actualStart || slot?.start} – {l.actualEnd || slot?.end})
                                                                     </span>
                                                                 )}
@@ -891,43 +942,52 @@ export default function Reports() {
                                                             <div className="flex flex-wrap items-center gap-1.5 text-xs font-extrabold text-slate-950">
                                                                 <span>{resolveCourseName(l.courseId)}</span>
                                                                 {resolveCourseCode(l.courseId) && (
-                                                                    <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-900 text-[10px] font-bold">
+                                                                    <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-950 text-[10px] font-black">
                                                                         {resolveCourseCode(l.courseId)}
                                                                     </span>
                                                                 )}
                                                             </div>
 
-                                                            {resolveClassInfo(l) && (
-                                                                <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-700 mt-0.5">
-                                                                    <Layers className="w-3 h-3" />
-                                                                    {resolveClassInfo(l)}
-                                                                </div>
-                                                            )}
+                                                            <div className="flex flex-wrap items-center gap-3 mt-1 text-[11px] font-bold text-slate-700">
+                                                                {resolveClassInfo(l) && (
+                                                                    <span className="flex items-center gap-1 text-indigo-800">
+                                                                        <Layers className="w-3 h-3" />
+                                                                        {resolveClassInfo(l)}
+                                                                    </span>
+                                                                )}
+
+                                                                {l.room && (
+                                                                    <span className="flex items-center gap-1 text-slate-700">
+                                                                        <MapPin className="w-3 h-3 text-slate-400" />
+                                                                        {l.room}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
 
                                                         <div className="rounded-xl bg-slate-50 p-2.5 text-xs space-y-1 border border-slate-100">
                                                             <div>
-                                                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                                                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 block">
                                                                     Actually Covered
                                                                 </span>
-                                                                <p className="text-slate-900 font-bold break-words">
+                                                                <p className="text-slate-950 font-extrabold break-words">
                                                                     {getActuallyCovered(l)}
                                                                 </p>
                                                             </div>
 
                                                             {l.remarks && (
-                                                                <div className="pt-1 border-t border-slate-200/60 text-[10px] text-slate-500 italic">
+                                                                <div className="pt-1 border-t border-slate-200/60 text-[10px] text-slate-600 italic font-medium">
                                                                     Note: {l.remarks}
                                                                 </div>
                                                             )}
                                                         </div>
 
                                                         <div className="flex items-center justify-between gap-2 pt-1">
-                                                            <div className="flex items-center gap-3 text-xs font-bold text-slate-700">
+                                                            <div className="flex items-center gap-3 text-xs font-bold text-slate-800">
                                                                 <span>Hours: <strong className="text-slate-950 font-black">{Number(l.hours || 0).toFixed(2)}</strong></span>
                                                                 {l.attendance !== undefined && l.attendance !== null && (
-                                                                    <span className="flex items-center gap-1 text-slate-500 font-semibold text-[11px]">
-                                                                        <UserCheck className="w-3 h-3" /> {l.attendance}
+                                                                    <span className="flex items-center gap-1 text-slate-700 font-bold text-[11px]">
+                                                                        <UserCheck className="w-3 h-3 text-blue-600" /> {l.attendance}
                                                                     </span>
                                                                 )}
                                                             </div>
@@ -937,14 +997,14 @@ export default function Reports() {
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => openForCorrection(l.id)}
-                                                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 text-[11px] font-bold rounded-lg border border-blue-200 hover:bg-blue-100 cursor-pointer"
+                                                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-800 text-[11px] font-bold rounded-lg border border-blue-200 hover:bg-blue-100 cursor-pointer"
                                                                     >
                                                                         <Edit3 className="w-3 h-3" /> Edit
                                                                     </button>
                                                                     <button
                                                                         type="button"
                                                                         onClick={(e) => deleteLogEntry(l.id, e)}
-                                                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-200 hover:bg-rose-100 cursor-pointer"
+                                                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 text-rose-800 text-[11px] font-bold rounded-lg border border-rose-200 hover:bg-rose-100 cursor-pointer"
                                                                     >
                                                                         <Trash2 className="w-3 h-3" /> Delete
                                                                     </button>
@@ -966,13 +1026,13 @@ export default function Reports() {
             {/* 2. DESKTOP AUDIT TABLE VIEW */}
             <section className="hidden md:block overflow-hidden rounded-2xl border border-blue-900/20 bg-white shadow-md">
                 <div className="overflow-x-auto">
-                    <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
+                    <table className="w-full min-w-[1200px] border-collapse text-left text-sm">
                         <thead>
                             <tr className="border-b-2 border-blue-900 bg-blue-950 text-blue-50 text-[12px] font-black uppercase tracking-wider">
                                 <th className="py-4 px-4 text-center w-14 border-r border-blue-900/60">Sl.</th>
                                 <th className="py-4 px-4 w-32 border-r border-blue-900/60">Date</th>
-                                <th className="py-4 px-4 w-40 border-r border-blue-900/60">Period / Time</th>
-                                <th className="py-4 px-4 border-r border-blue-900/60">Class &amp; Subject</th>
+                                <th className="py-4 px-4 w-44 border-r border-blue-900/60">Period / Time</th>
+                                <th className="py-4 px-4 border-r border-blue-900/60">Class, Subject &amp; Room</th>
                                 <th className="py-4 px-4 border-r border-blue-900/60">Planned Topic</th>
                                 <th className="py-4 px-4 border-r border-blue-900/60">Actually Covered</th>
                                 <th className="py-4 px-4 text-center w-28 border-r border-blue-900/60">Status</th>
@@ -983,7 +1043,7 @@ export default function Reports() {
                             </tr>
                         </thead>
 
-                        <tbody className="divide-y divide-slate-200 text-slate-800 text-xs">
+                        <tbody className="divide-y divide-slate-200 text-slate-900 text-xs font-medium">
                             {filteredLogs.length === 0 ? (
                                 <tr>
                                     <td
@@ -1012,37 +1072,42 @@ export default function Reports() {
                                                 {index + 1}
                                             </td>
 
-                                            <td className="py-3.5 px-4 font-bold text-slate-900 whitespace-nowrap border-r border-slate-100">
+                                            <td className="py-3.5 px-4 font-black text-slate-950 whitespace-nowrap border-r border-slate-100">
                                                 {l.date}
                                             </td>
 
                                             <td className="py-3.5 px-4 whitespace-nowrap border-r border-slate-100">
-                                                <div className="font-extrabold text-slate-800">
+                                                <div className="font-black text-blue-950">
                                                     {slot?.period ? `Period ${slot.period}` : l.classType || 'Extra Class'}
                                                 </div>
-                                                <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                                                <div className="text-[11px] font-extrabold text-slate-600 mt-0.5">
                                                     {l.actualStart || slot?.start || ''} – {l.actualEnd || slot?.end || ''}
                                                 </div>
                                             </td>
 
                                             <td className="py-3.5 px-4 border-r border-slate-100">
-                                                <div className="font-extrabold text-slate-900 leading-snug">
+                                                <div className="font-black text-slate-950 leading-snug">
                                                     {resolveCourseName(l.courseId)}
                                                 </div>
-                                                <div className="text-xs font-medium text-slate-500 mt-0.5">
+                                                <div className="text-xs font-bold text-indigo-800 mt-0.5">
                                                     {resolveClassInfo(l)}
                                                     {resolveCourseCode(l.courseId) && ` • [${resolveCourseCode(l.courseId)}]`}
                                                 </div>
+                                                {l.room && (
+                                                    <div className="text-[11px] font-bold text-slate-600 flex items-center gap-1 mt-0.5">
+                                                        <MapPin className="w-3 h-3 text-slate-400" /> {l.room}
+                                                    </div>
+                                                )}
                                             </td>
 
-                                            <td className="py-3.5 px-4 text-slate-600 border-r border-slate-100 max-w-[180px]">
+                                            <td className="py-3.5 px-4 text-slate-700 font-semibold border-r border-slate-100 max-w-[180px]">
                                                 {getPlannedTopicName(l)}
                                             </td>
 
-                                            <td className="py-3.5 px-4 font-semibold text-slate-900 border-r border-slate-100 max-w-[220px]">
+                                            <td className="py-3.5 px-4 font-extrabold text-slate-950 border-r border-slate-100 max-w-[220px]">
                                                 <div>{getActuallyCovered(l)}</div>
                                                 {l.remarks && (
-                                                    <div className="text-[11px] text-slate-500 italic mt-0.5">
+                                                    <div className="text-[11px] text-slate-600 font-semibold italic mt-0.5">
                                                         Note: {l.remarks}
                                                     </div>
                                                 )}
@@ -1050,19 +1115,19 @@ export default function Reports() {
 
                                             <td className="py-3.5 px-4 text-center whitespace-nowrap border-r border-slate-100">
                                                 <span
-                                                    className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-extrabold ${
+                                                    className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-black ${
                                                         l.status === 'Taken' || l.status === 'completed'
-                                                            ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300'
+                                                            ? 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300'
                                                             : l.status === 'Compensated' || l.status === 'partial'
-                                                            ? 'bg-blue-100 text-blue-800 ring-1 ring-blue-300'
-                                                            : 'bg-slate-200 text-slate-700 ring-1 ring-slate-300'
+                                                            ? 'bg-blue-100 text-blue-900 ring-1 ring-blue-300'
+                                                            : 'bg-slate-200 text-slate-800 ring-1 ring-slate-300'
                                                     }`}
                                                 >
                                                     {l.status || 'Taken'}
                                                 </span>
                                             </td>
 
-                                            <td className="py-3.5 px-4 text-right font-extrabold text-slate-900 whitespace-nowrap border-r border-slate-100">
+                                            <td className="py-3.5 px-4 text-right font-black text-slate-950 whitespace-nowrap border-r border-slate-100">
                                                 {Number(l.hours || 0).toFixed(2)}
                                             </td>
 
@@ -1073,7 +1138,7 @@ export default function Reports() {
                                                             type="button"
                                                             onClick={() => openForCorrection(l.id)}
                                                             title="Edit Details"
-                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg transition border border-blue-200 cursor-pointer"
+                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold rounded-lg transition border border-blue-200 cursor-pointer"
                                                         >
                                                             <Edit3 className="w-3.5 h-3.5" />
                                                             Edit
@@ -1082,7 +1147,7 @@ export default function Reports() {
                                                             type="button"
                                                             onClick={(e) => deleteLogEntry(l.id, e)}
                                                             title="Delete Entry"
-                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-lg transition border border-rose-200 cursor-pointer"
+                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold rounded-lg transition border border-rose-200 cursor-pointer"
                                                         >
                                                             <Trash2 className="w-3.5 h-3.5" />
                                                             Delete
@@ -1096,45 +1161,6 @@ export default function Reports() {
                             )}
                         </tbody>
                     </table>
-                </div>
-            </section>
-
-            {/* SUMMARY METRICS MARKER CARDS */}
-            <section className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4 print:hidden">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
-                    <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                        Total Records
-                    </span>
-                    <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-slate-900">
-                        {filteredLogs.length}
-                    </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
-                    <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                        Classes Taken
-                    </span>
-                    <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-emerald-600">
-                        {takenClasses}
-                    </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
-                    <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                        Delivered Hours
-                    </span>
-                    <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-indigo-600">
-                        {totalHours.toFixed(2)}
-                    </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm col-span-2 sm:col-span-1">
-                    <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                        Latest Record Date
-                    </span>
-                    <p className="mt-1 text-xl sm:text-2xl font-extrabold text-amber-600 truncate">
-                        {latestDate}
-                    </p>
                 </div>
             </section>
 

@@ -24,7 +24,8 @@ import {
     X,
     GraduationCap,
     Info,
-    Trash2
+    Trash2,
+    HelpCircle
 } from 'lucide-react';
 
 /* =========================================================
@@ -206,6 +207,9 @@ function LogFormContent() {
     const urlSlotId = searchParams.get('slotId');
 
     const [mounted, setMounted] = useState(false);
+
+    // Toggleable Quick Guide State
+    const [showGuide, setShowGuide] = useState(false);
 
     const [d, setD] = useState<ProfPlanData>({
         courses: [],
@@ -603,26 +607,41 @@ function LogFormContent() {
                 </div>
             </section>
 
-            {/* GUIDED ONBOARDING BANNER */}
-            <PageGuide
-                guideKey="progress_log"
-                title="Adaptive Class Register: Quick Guide"
-                summary="Log completed teaching engagements, topic coverage, duration, and student attendance for official college records."
-                steps={[
-                    {
-                        step: '1. Choose Mode & Period',
-                        desc: 'Select "Regular Routine Class" to link a timetable period, or "Click to Register Special/Extra/Remedial Class" for extra lectures.'
-                    },
-                    {
-                        step: '2. Record Topics & Duration',
-                        desc: 'Confirm the syllabus topic covered, verify lecture start/end clock times, and enter student attendance.'
-                    },
-                    {
-                        step: '3. Save to Academic Register',
-                        desc: 'Click "Save to Progress Register" to update compliance reports and syllabus delivery statistics.'
-                    }
-                ]}
-            />
+            {/* TOGGLEABLE QUICK GUIDE SECTION */}
+            <div className="print:hidden space-y-2">
+                <button
+                    type="button"
+                    onClick={() => setShowGuide(!showGuide)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-xs font-extrabold text-blue-900 shadow-sm transition cursor-pointer"
+                >
+                    <HelpCircle className="w-4 h-4 text-blue-600" />
+                    <span>{showGuide ? 'Hide Quick Guide & Instructions' : '📖 Show Quick Guide & Instructions'}</span>
+                </button>
+
+                {showGuide && (
+                    <div className="animate-in fade-in duration-200">
+                        <PageGuide
+                            guideKey="progress_log"
+                            title="Adaptive Class Register: Quick Guide"
+                            summary="Log completed teaching engagements, topic coverage, duration, and student attendance for official college records."
+                            steps={[
+                                {
+                                    step: '1. Choose Mode & Period',
+                                    desc: 'Select "Regular Routine Class" to link a timetable period, or "Click to Register Special/Extra/Remedial Class" for extra lectures.'
+                                },
+                                {
+                                    step: '2. Record Topics & Duration',
+                                    desc: 'Confirm the syllabus topic covered, verify lecture start/end clock times, and enter student attendance.'
+                                },
+                                {
+                                    step: '3. Save to Academic Register',
+                                    desc: 'Click "Save to Progress Register" to update compliance reports and syllabus delivery statistics.'
+                                }
+                            ]}
+                        />
+                    </div>
+                )}
+            </div>
 
             {/* FORM BODY */}
             <form onSubmit={submit} className="space-y-6">

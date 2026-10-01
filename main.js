@@ -4,39 +4,23 @@ const http = require('http');
 const fs = require('fs');
 
 let server;
+let mainWindow;
 
 /*
  * =========================================================
  * PROFPLAN LOCAL SERVER
  * =========================================================
- *
- * IMPORTANT:
- *
- * ProfPlan uses localStorage for local data.
- *
- * localStorage is tied to the browser origin, including
- * the port number.
- *
- * Therefore we MUST use a fixed port.
- *
- * DO NOT change this back to:
- *
- *     server.listen(0, ...)
- *
- * because that creates a different origin every time
- * ProfPlan starts.
- *
- * Stable ProfPlan origin:
- *
- *     http://127.0.0.1:3157
- *
- * This allows the saved teacher profile and academic data
- * to remain available between application launches.
- * =========================================================
  */
 
 const PROFPLAN_HOST = '127.0.0.1';
 const PROFPLAN_PORT = 3157;
+
+console.log('========================================');
+console.log('PROFPLAN ELECTRON STARTING');
+console.log('Electron version:', process.versions.electron);
+console.log('Node version:', process.versions.node);
+console.log('App path:', __dirname);
+console.log('========================================');
 
 
 /* =========================================================
@@ -46,55 +30,148 @@ const PROFPLAN_PORT = 3157;
 function startServer() {
     const outDir = path.join(__dirname, 'out');
 
+    console.log('ProfPlan out directory:', outDir);
+
+    if (!fs.existsSync(outDir)) {
+        throw new Error(
+            `ProfPlan "out" directory was not found: ${outDir}`
+        );
+    }
+
     server = http.createServer((req, res) => {
-        let urlPath = decodeURIComponent(
-            req.url.split('?')[0]
-        );
+        let urlPath;
+
+        try {
+            urlPath = decodeURIComponent(
+                req.url.split('?')[0]
+            );
+        } catch (error) {
+            res.writeHead(400, {
+                'Content-Type':
+                    'text/plain; charset=utf-8',
+            });
+
+            res.end('Bad request');
+            return;
+        }
 
         /*
-         * Root of ProfPlan opens Today.
+         * Root opens Today.
          */
+
         if (urlPath === '/') {
-            urlPath = '/today.html';
+            urlPath = '/today/';
         }
 
         /*
-         * Convert clean Next.js routes such as:
-         *
-         * /today
-         * /timetable
-         * /syllabus
-         *
-         * into their static HTML files.
+         * Prevent path traversal.
          */
-        else if (!path.extname(urlPath)) {
-            urlPath = `${urlPath}.html`;
+
+        const normalisedPath = path.normalize(urlPath);
+
+        if (
+            normalisedPath.startsWith('..') ||
+            normalisedPath.includes(`..${path.sep}`)
+        ) {
+            res.writeHead(403, {
+                'Content-Type':
+                    'text/plain; charset=utf-8',
+            });
+
+            res.end('Forbidden');
+            return;
         }
 
-        const filePath = path.join(
-            outDir,
-            urlPath
-        );
+        /*
+         * -----------------------------------------------------
+         * NEXT.JS STATIC EXPORT
+         * -----------------------------------------------------
+         *
+         * Because next.config.mjs contains:
+         *
+         * output: 'export'
+         * trailingSlash: true
+         *
+         * routes are exported as:
+         *
+         * out/today/index.html
+         * out/timetable/index.html
+         * out/syllabus/index.html
+         *
+         */
+
+        let filePath;
+
+        if (
+            urlPath.endsWith('/') ||
+            !path.extname(urlPath)
+        ) {
+            const routePath =
+                urlPath.endsWith('/')
+                    ? urlPath
+                    : `${urlPath}/`;
+
+            filePath = path.join(
+                outDir,
+                routePath,
+                'index.html'
+            );
+        } else {
+            filePath = path.join(
+                outDir,
+                urlPath
+            );
+        }
+
+        /*
+         * Make sure the resolved file remains inside outDir.
+         */
+
+        const resolvedOutDir =
+            path.resolve(outDir);
+
+        const resolvedFilePath =
+            path.resolve(filePath);
+
+        if (
+            !resolvedFilePath.startsWith(
+                resolvedOutDir
+            )
+        ) {
+            res.writeHead(403, {
+                'Content-Type':
+                    'text/plain; charset=utf-8',
+            });
+
+            res.end('Forbidden');
+            return;
+        }
+
+        /*
+         * Serve requested file.
+         */
 
         fs.readFile(
-            filePath,
+            resolvedFilePath,
             (err, data) => {
                 if (err) {
+                    console.error(
+                        'FILE NOT FOUND:',
+                        resolvedFilePath
+                    );
+
                     res.writeHead(404, {
                         'Content-Type':
                             'text/plain; charset=utf-8',
                     });
 
-                    res.end(
-                        'Page not found'
-                    );
-
+                    res.end('Page not found');
                     return;
                 }
 
                 const ext =
                     path.extname(
-                        filePath
+                        resolvedFilePath
                     ).toLowerCase();
 
                 const contentTypes = {
@@ -102,6 +179,9 @@ function startServer() {
                         'text/html; charset=utf-8',
 
                     '.js':
+                        'application/javascript; charset=utf-8',
+
+                    '.mjs':
                         'application/javascript; charset=utf-8',
 
                     '.css':
@@ -119,6 +199,12 @@ function startServer() {
                     '.jpeg':
                         'image/jpeg',
 
+                    '.gif':
+                        'image/gif',
+
+                    '.webp':
+                        'image/webp',
+
                     '.svg':
                         'image/svg+xml',
 
@@ -130,6 +216,18 @@ function startServer() {
 
                     '.txt':
                         'text/plain; charset=utf-8',
+
+                    '.woff':
+                        'font/woff',
+
+                    '.woff2':
+                        'font/woff2',
+
+                    '.ttf':
+                        'font/ttf',
+
+                    '.otf':
+                        'font/otf',
                 };
 
                 res.writeHead(200, {
@@ -143,43 +241,25 @@ function startServer() {
         );
     });
 
-
-    /* =====================================================
-       FIXED PORT — CRITICAL PROFILE PERSISTENCE FIX
-    ===================================================== */
+    server.on(
+        'error',
+        (error) => {
+            console.error(
+                'PROFPLAN SERVER ERROR:',
+                error
+            );
+        }
+    );
 
     server.listen(
         PROFPLAN_PORT,
         PROFPLAN_HOST,
         () => {
             console.log(
-                `ProfPlan running at http://${PROFPLAN_HOST}:${PROFPLAN_PORT}`
+                `ProfPlan server running at http://${PROFPLAN_HOST}:${PROFPLAN_PORT}`
             );
 
             createWindow();
-        }
-    );
-
-
-    /* =====================================================
-       SERVER ERROR HANDLING
-    ===================================================== */
-
-    server.on(
-        'error',
-        (error) => {
-            console.error(
-                'ProfPlan server error:',
-                error
-            );
-
-            if (
-                error.code === 'EADDRINUSE'
-            ) {
-                console.error(
-                    `Port ${PROFPLAN_PORT} is already in use.`
-                );
-            }
         }
     );
 }
@@ -190,7 +270,9 @@ function startServer() {
 ========================================================= */
 
 function createWindow() {
-    const win =
+    console.log('Creating ProfPlan BrowserWindow...');
+
+    mainWindow =
         new BrowserWindow({
             width: 1280,
             height: 860,
@@ -210,20 +292,90 @@ function createWindow() {
                 /*
                  * Persistent browser session.
                  *
-                 * Keep this exactly as it is.
+                 * Keeps ProfPlan localStorage persistent.
                  */
                 partition:
                     'persist:profplan',
             },
         });
 
+    const startURL =
+        `http://${PROFPLAN_HOST}:${PROFPLAN_PORT}/today/`;
 
-    /* =====================================================
-       OPEN TODAY AS PROFPLAN HOME PAGE
-    ===================================================== */
+    console.log(
+        'Loading ProfPlan:',
+        startURL
+    );
 
-    win.loadURL(
-        `http://${PROFPLAN_HOST}:${PROFPLAN_PORT}/today`
+    mainWindow.loadURL(startURL);
+
+
+    /*
+     * Page load success.
+     */
+
+    mainWindow.webContents.on(
+        'did-finish-load',
+        () => {
+            console.log(
+                'ProfPlan page loaded successfully.'
+            );
+        }
+    );
+
+
+    /*
+     * Page load failure.
+     */
+
+    mainWindow.webContents.on(
+        'did-fail-load',
+        (
+            event,
+            errorCode,
+            errorDescription,
+            validatedURL
+        ) => {
+            console.error(
+                'PROFPLAN PAGE LOAD FAILED:',
+                {
+                    errorCode,
+                    errorDescription,
+                    validatedURL,
+                }
+            );
+        }
+    );
+
+
+    /*
+     * Renderer crash / termination.
+     */
+
+    mainWindow.webContents.on(
+        'render-process-gone',
+        (event, details) => {
+            console.error(
+                'PROFPLAN RENDERER TERMINATED:',
+                details
+            );
+        }
+    );
+
+
+    /*
+     * Window closed.
+     */
+
+    mainWindow.on(
+        'closed',
+        () => {
+            console.log(
+                'ProfPlan window closed.'
+            );
+
+            mainWindow = null;
+        }
     );
 }
 
@@ -232,22 +384,35 @@ function createWindow() {
    ELECTRON READY
 ========================================================= */
 
-app.whenReady().then(() => {
-    startServer();
+app.whenReady()
+    .then(() => {
+        console.log(
+            'Electron app.whenReady() fired.'
+        );
 
-    app.on(
-        'activate',
-        () => {
-            if (
-                BrowserWindow
-                    .getAllWindows()
-                    .length === 0
-            ) {
-                createWindow();
+        startServer();
+
+        app.on(
+            'activate',
+            () => {
+                if (
+                    BrowserWindow
+                        .getAllWindows()
+                        .length === 0
+                ) {
+                    createWindow();
+                }
             }
+        );
+    })
+    .catch(
+        (error) => {
+            console.error(
+                'PROFPLAN ELECTRON STARTUP ERROR:',
+                error
+            );
         }
     );
-});
 
 
 /* =========================================================
@@ -257,8 +422,19 @@ app.whenReady().then(() => {
 app.on(
     'window-all-closed',
     () => {
+        console.log(
+            'All ProfPlan windows closed.'
+        );
+
         if (server) {
-            server.close();
+            server.close(
+                () => {
+                    console.log(
+                        'ProfPlan local server closed.'
+                    );
+                }
+            );
+
             server = null;
         }
 
@@ -267,5 +443,30 @@ app.on(
         ) {
             app.quit();
         }
+    }
+);
+
+
+/* =========================================================
+   UNCAUGHT ERRORS
+========================================================= */
+
+process.on(
+    'uncaughtException',
+    (error) => {
+        console.error(
+            'PROFPLAN UNCAUGHT EXCEPTION:',
+            error
+        );
+    }
+);
+
+process.on(
+    'unhandledRejection',
+    (reason) => {
+        console.error(
+            'PROFPLAN UNHANDLED REJECTION:',
+            reason
+        );
     }
 );

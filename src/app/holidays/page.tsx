@@ -17,10 +17,14 @@ import {
     Briefcase,
     Pencil,
     Settings2,
+    HelpCircle,
 } from 'lucide-react';
 
 export default function HolidayPage() {
     const [mounted, setMounted] = useState(false);
+
+    // Toggleable Quick Guide State
+    const [showGuide, setShowGuide] = useState(false);
 
     const [data, setData] = useState<ProfPlanData>({
         courses: [],
@@ -449,33 +453,47 @@ export default function HolidayPage() {
                 </div>
             </section>
 
-            {/* GUIDE */}
+            {/* TOGGLEABLE QUICK GUIDE SECTION */}
+            <div className="print:hidden space-y-2">
+                <button
+                    type="button"
+                    onClick={() => setShowGuide(!showGuide)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-xs font-extrabold text-blue-900 shadow-sm transition cursor-pointer"
+                >
+                    <HelpCircle className="w-4 h-4 text-blue-600" />
+                    <span>{showGuide ? 'Hide Quick Guide & Instructions' : '📖 Show Quick Guide & Instructions'}</span>
+                </button>
 
-            <PageGuide
-                guideKey="holidays_leave"
-                title="Holidays & Leave Register: Quick Guide"
-                summary="Manage institutional calendar dates and teacher leaves so your academic records remain synchronized."
-                steps={[
-                    {
-                        step: '1. Add Calendar / Leave',
-                        desc: 'Log institutional holidays, vacations or personal leaves.',
-                        onClick: () => {
-                            resetForm();
-                            setIsAddModalOpen(true);
-                        },
-                    },
-                    {
-                        step: '2. Load Official Calendar',
-                        desc: "Use the preset button to instantly populate all 2026 DHE Odisha holidays.",
-                        onClick: handleLoadSampleHolidays,
-                    },
-                    {
-                        step: '3. Inspection & Audit Sync',
-                        desc: 'Review holiday and leave records with your academic teaching records in Reports.',
-                        href: '/reports',
-                    },
-                ]}
-            />
+                {showGuide && (
+                    <div className="animate-in fade-in duration-200">
+                        <PageGuide
+                            guideKey="holidays_leave"
+                            title="Holidays & Leave Register: Quick Guide"
+                            summary="Manage institutional calendar dates and teacher leaves so your academic records remain synchronized."
+                            steps={[
+                                {
+                                    step: '1. Add Calendar / Leave',
+                                    desc: 'Log institutional holidays, vacations or personal leaves.',
+                                    onClick: () => {
+                                        resetForm();
+                                        setIsAddModalOpen(true);
+                                    },
+                                },
+                                {
+                                    step: '2. Load Official Calendar',
+                                    desc: "Use the preset button to instantly populate all 2026 DHE Odisha holidays.",
+                                    onClick: handleLoadSampleHolidays,
+                                },
+                                {
+                                    step: '3. Inspection & Audit Sync',
+                                    desc: 'Review holiday and leave records with your academic teaching records in Reports.',
+                                    href: '/reports',
+                                },
+                            ]}
+                        />
+                    </div>
+                )}
+            </div>
 
             {/* SUCCESS */}
 
@@ -573,7 +591,7 @@ export default function HolidayPage() {
 
             </div>
 
-            {/* RECORDS */}
+            {/* RECORDS — COMPACT HIGH-DENSITY ROW DESIGN */}
 
             {filteredEntries.length === 0 ? (
 
@@ -624,7 +642,7 @@ export default function HolidayPage() {
 
             ) : (
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-2.5">
 
                     {filteredEntries.map((item: any) => {
 
@@ -650,84 +668,77 @@ export default function HolidayPage() {
                         return (
                             <div
                                 key={item.id}
-                                className={`group relative overflow-hidden rounded-2xl border p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg ${isLeave
-                                        ? 'border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-white hover:border-indigo-400'
-                                        : 'border-amber-200 bg-gradient-to-br from-amber-50/70 via-white to-white hover:border-amber-400'
+                                className={`group relative overflow-hidden rounded-2xl border p-4 shadow-xs transition-all hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${isLeave
+                                        ? 'border-indigo-200 bg-white hover:border-indigo-400'
+                                        : 'border-amber-200 bg-white hover:border-amber-400'
                                     }`}
                             >
 
                                 <div
-                                    className={`absolute left-0 top-0 h-full w-1 ${isLeave
+                                    className={`absolute left-0 top-0 h-full w-1.5 ${isLeave
                                             ? 'bg-indigo-500'
                                             : 'bg-amber-500'
                                         }`}
                                 />
 
-                                <div className="space-y-3">
-
-                                    <div className="flex items-start justify-between gap-2">
-
-                                        <span
-                                            className={`rounded-lg border px-2.5 py-1 text-[9px] font-black uppercase tracking-wide ${isLeave
-                                                    ? 'border-indigo-200 bg-indigo-100 text-indigo-900'
-                                                    : 'border-amber-200 bg-amber-100 text-amber-900'
-                                                }`}
-                                        >
-                                            {item.type || 'Holiday'}
-                                        </span>
-
-                                        <div className="flex gap-1 opacity-60 transition group-hover:opacity-100">
-
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    handleEditEntry(item)
-                                                }
-                                                className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 cursor-pointer"
-                                                title="Edit"
-                                            >
-                                                <Pencil className="h-3.5 w-3.5" />
-                                            </button>
-
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    handleDeleteEntry(
-                                                        item.id
-                                                    )
-                                                }
-                                                className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
-                                                title="Delete"
-                                            >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
-
-                                        </div>
-
+                                <div className="flex items-center gap-3.5 min-w-0 pl-2">
+                                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-black ${
+                                        isLeave ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-800'
+                                    }`}>
+                                        <Calendar className="h-4 w-4" />
                                     </div>
 
-                                    <h3 className="text-base font-black leading-snug text-slate-900">
-                                        {item.name}
-                                    </h3>
-
-                                    <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
-
-                                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-                                            <Calendar className="h-4 w-4" />
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h3 className="text-sm font-black text-slate-900 truncate">
+                                                {item.name}
+                                            </h3>
+                                            <span
+                                                className={`rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide ${isLeave
+                                                        ? 'border-indigo-200 bg-indigo-100 text-indigo-900'
+                                                        : 'border-amber-200 bg-amber-100 text-amber-900'
+                                                    }`}
+                                            >
+                                                {item.type || 'Holiday'}
+                                            </span>
                                         </div>
 
-                                        <span>
-                                            {formattedDate}
-                                        </span>
-
+                                        <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-500 mt-0.5">
+                                            <span>{formattedDate}</span>
+                                            {item.description && (
+                                                <>
+                                                    <span className="text-slate-300">•</span>
+                                                    <span className="italic truncate max-w-md">{item.description}</span>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
+                                </div>
 
-                                    {item.description && (
-                                        <p className="rounded-xl bg-slate-50 px-3 py-2 text-[11px] italic leading-relaxed text-slate-500">
-                                            {item.description}
-                                        </p>
-                                    )}
+                                <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            handleEditEntry(item)
+                                        }
+                                        className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 cursor-pointer shadow-2xs"
+                                        title="Edit"
+                                    >
+                                        <Pencil className="h-3.5 w-3.5" />
+                                    </button>
 
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            handleDeleteEntry(
+                                                item.id
+                                            )
+                                        }
+                                        className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 cursor-pointer shadow-2xs"
+                                        title="Delete"
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
                                 </div>
 
                             </div>

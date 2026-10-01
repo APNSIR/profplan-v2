@@ -403,7 +403,6 @@ function TimetableContent() {
     const [pendingConflict, setPendingConflict] =
         useState<Conflict | null>(null);
 
-    // Warning banner state for class filtering / empty periods check
     const [filterWarningMsg, setFilterWarningMsg] = useState<string | null>(null);
 
     const formSectionRef =
@@ -416,7 +415,6 @@ function TimetableContent() {
     const dayTabRefs = useRef<{ [key: number]: HTMLButtonElement | null }>({});
     const todayColumnRef = useRef<HTMLTableHeaderCellElement | null>(null);
 
-    // Auto-scroll desktop table to focus on today's day column on mount
     useEffect(() => {
         if (mounted && todayColumnRef.current) {
             todayColumnRef.current.scrollIntoView({
@@ -590,10 +588,6 @@ function TimetableContent() {
         );
     }, [data.slots, classes, selectedClassFilterId]);
 
-    /* =====================================================
-       CLASS FILTER CLICK WITH ZERO-PERIOD WARNING
-       ===================================================== */
-
     function handleSelectClassFilter(clsId: string | null) {
         setFilterWarningMsg(null);
 
@@ -608,7 +602,6 @@ function TimetableContent() {
             return;
         }
 
-        // Check if this class has any assigned periods
         const classSlots = (data.slots || []).filter((slot) =>
             slotBelongsToClass(slot, clsId, targetClass.name)
         );
@@ -1987,12 +1980,14 @@ function TimetableContent() {
                                                                                         <span className="truncate">{slot.room}</span>
                                                                                     </div>
 
+                                                                                    {/* AUDIT TRANSPARENCY OVERRIDE BADGE */}
                                                                                     {(slot as any).conflictReason && (
                                                                                         <div
-                                                                                            title={(slot as any).conflictReason}
-                                                                                            className="mt-1 rounded-md bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[8px] font-bold text-amber-800 truncate"
+                                                                                            title={`Adjustment Reason: ${(slot as any).conflictReason}`}
+                                                                                            className="mt-1.5 rounded-lg bg-amber-100/90 border border-amber-300 px-2 py-1 text-[9px] font-black text-amber-900 truncate shadow-2xs flex items-center gap-1"
                                                                                         >
-                                                                                            Conflict override
+                                                                                            <span className="h-1.5 w-1.5 rounded-full bg-amber-600 animate-pulse shrink-0" />
+                                                                                            <span className="truncate">Adjusted: {(slot as any).conflictReason}</span>
                                                                                         </div>
                                                                                     )}
                                                                                 </div>
@@ -2149,6 +2144,16 @@ function TimetableContent() {
                                                                         <MapPin className="w-3 h-3 text-slate-400" /> {slot.room}
                                                                     </span>
                                                                 </div>
+
+                                                                {(slot as any).conflictReason && (
+                                                                    <div
+                                                                        title={`Adjustment Reason: ${(slot as any).conflictReason}`}
+                                                                        className="mt-1.5 rounded-lg bg-amber-100/90 border border-amber-300 px-2 py-1 text-[9px] font-black text-amber-900 truncate shadow-2xs flex items-center gap-1"
+                                                                    >
+                                                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-600 animate-pulse shrink-0" />
+                                                                        <span className="truncate">Adjusted: {(slot as any).conflictReason}</span>
+                                                                    </div>
+                                                                )}
                                                             </div>
 
                                                             <div className="flex gap-2 pt-2 border-t border-slate-100">

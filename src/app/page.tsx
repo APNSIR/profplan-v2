@@ -29,6 +29,7 @@ export default function Home() {
   const router = useRouter();
   const corporateAddress = "Qr. No. BL-106, VSS Nagar, Mancheswar, Bhubaneswar, Khorda - 751017, Odisha";
 
+  const [mounted, setMounted] = useState(false);
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [userName, setUserName] = useState('');
   const [showSignInModal, setShowSignInModal] = useState(false);
@@ -36,9 +37,10 @@ export default function Home() {
   const [phoneNumber, setPhoneNumber] = useState('');
 
   useEffect(() => {
+    setMounted(true);
     try {
-      // 1. Check profplan_profile
-      const storedProfile = localStorage.getItem('profplan_profile');
+      // 1. Check profplan_v2_profile
+      const storedProfile = localStorage.getItem('profplan_v2_profile');
       let foundOnboarded = false;
 
       if (storedProfile) {
@@ -49,8 +51,8 @@ export default function Home() {
         }
       }
 
-      // 2. Also check profplan_data (if teacher already created timetable/classes)
-      const storedData = localStorage.getItem('profplan_data');
+      // 2. Also check profplan_v2_data (if teacher already created timetable/classes)
+      const storedData = localStorage.getItem('profplan_v2_data');
       if (storedData) {
         const parsedData = JSON.parse(storedData);
         if (
@@ -78,11 +80,12 @@ export default function Home() {
 
   const handleLaunchSetup = () => {
     localStorage.removeItem('profplan_landing_active');
-    // If already has classes or slots, always route to /today
+    
+    // If already onboarded, route to /today. Otherwise, open our full-screen Setup Odyssey studio.
     if (isOnboarded) {
       router.push('/today');
     } else {
-      router.push('/today');
+      router.push('/setup');
     }
   };
 
@@ -174,7 +177,7 @@ export default function Home() {
 
         {/* Featured Product: PROFPLAN */}
         <div 
-          onClick={handleDirectWorkspace}
+          onClick={handleLaunchSetup}
           className="group block mt-6 text-slate-200 max-w-xl mx-auto leading-relaxed bg-gradient-to-b from-white/[0.09] to-white/[0.04] border border-white/20 p-5 sm:p-6 rounded-[1.75rem] backdrop-blur-xl shadow-[0_16px_40px_rgba(0,0,0,0.45)] transition duration-300 hover:-translate-y-0.5 hover:border-indigo-500/60 hover:shadow-indigo-500/10 cursor-pointer text-center relative overflow-hidden"
         >
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[9px] font-black uppercase tracking-[0.2em] mb-2 ring-1 ring-indigo-500/30">
@@ -198,10 +201,16 @@ export default function Home() {
         <div className="mt-5 max-w-sm mx-auto w-full space-y-2">
           <button
             type="button"
-            onClick={handleDirectWorkspace}
+            onClick={handleLaunchSetup}
             className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-700 py-3.5 px-5 text-sm font-extrabold text-white shadow-lg shadow-indigo-950/60 hover:-translate-y-0.5 transition cursor-pointer"
           >
-            <span>{isOnboarded ? `Continue as ${userName}` : 'Open Daily Dashboard'}</span>
+            <span>
+              {!mounted 
+                ? 'Start Setup Journey' 
+                : isOnboarded 
+                  ? `Continue as ${userName}` 
+                  : 'Start Setup Journey'}
+            </span>
             <ArrowRight className="h-4 w-4" />
           </button>
 
@@ -382,11 +391,11 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   setShowSignInModal(false);
-                  handleDirectWorkspace();
+                  handleLaunchSetup();
                 }}
                 className="font-bold text-indigo-400 hover:underline cursor-pointer"
               >
-                Go directly to Today Dashboard
+                Go to Setup Odyssey
               </button>
             </p>
           </div>

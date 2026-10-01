@@ -18,7 +18,8 @@ function getDayName(dateStr: string): string {
 }
 
 /**
- * Transforms raw logs into inspection-grade rows by joining Course, Slot, and Class data.
+ * Transforms raw logs into inspection-grade rows by joining Course, Slot, and Class data,
+ * complete with precise period timings and room numbers.
  */
 function buildEnrichedLogRows(logs: Log[], data?: ProfPlanData) {
   const courseMap = new Map((data?.courses || []).map((c: any) => [c.id, c]));
@@ -38,6 +39,15 @@ function buildEnrichedLogRows(logs: Log[], data?: ProfPlanData) {
         ? 'Extra Class'
         : 'Special';
 
+      const timeRange = slot?.start && slot?.end
+        ? `${slot.start} - ${slot.end}`
+        : log.actualStart && log.actualEnd
+        ? `${log.actualStart} - ${log.actualEnd}`
+        : '—';
+
+      // Fixed: Explicitly checks log.room first, then fallback to slot.room
+      const roomLocation = log.room || slot?.room || '—';
+
       const className = classObj
         ? `${classObj.name}${classObj.stream ? ` (${classObj.stream})` : ''}`
         : log.semester || 'All Classes';
@@ -46,6 +56,8 @@ function buildEnrichedLogRows(logs: Log[], data?: ProfPlanData) {
         'Date': log.date || '',
         'Day': getDayName(log.date),
         'Period': periodNumber,
+        'Timing': timeRange,
+        'Room': roomLocation,
         'Class / Semester': className,
         'Subject / Paper': course?.name || 'General Lecture',
         'Paper Code': course?.code || '—',
@@ -60,25 +72,27 @@ function buildEnrichedLogRows(logs: Log[], data?: ProfPlanData) {
 }
 
 /**
- * Standard column width configuration for inspection-ready spreadsheets.
+ * Standard column width configuration for inspection-ready spreadsheets (including Room & Timing).
  */
 const standardColumnWidths = [
   { wch: 12 }, // Date
   { wch: 12 }, // Day
-  { wch: 12 }, // Period
+  { wch: 14 }, // Period
+  { wch: 16 }, // Timing
+  { wch: 14 }, // Room
   { wch: 22 }, // Class / Semester
   { wch: 26 }, // Subject / Paper
   { wch: 14 }, // Paper Code
-  { wch: 30 }, // Planned Topic
-  { wch: 34 }, // Topic Actually Covered
+  { wch: 28 }, // Planned Topic
+  { wch: 30 }, // Topic Actually Covered
   { wch: 12 }, // Status
-  { wch: 14 }, // Hours Taken
-  { wch: 14 }, // Attendance
-  { wch: 28 }, // Remarks
+  { wch: 12 }, // Hours Taken
+  { wch: 12 }, // Attendance
+  { wch: 24 }, // Remarks
 ];
 
 /**
- * Export daily teaching records directly to Excel.
+ * Export daily teaching records directly to Excel with Room and Timings.
  */
 export function exportLogsToExcel(
   logs: Log[],
@@ -110,7 +124,7 @@ export function exportComplianceReportToXLSX(
     { Field: 'Institution Name', Value: profile?.college || "People's College, Buguda" },
     { Field: 'Department', Value: profile?.department || 'English' },
     { Field: 'Faculty Name', Value: profile?.name || 'Atmaprakash Nayak' },
-    { Field: 'Designation', Value: profile?.designation || 'Head of Department' },
+    { Field: 'Designation', Value: profile?.designation || 'Head of Department & Lecturer in English' },
     { Field: 'Generated Date', Value: new Date().toLocaleDateString('en-IN') },
     { Field: 'Total Logged Hours', Value: (data.logs || []).reduce((acc: number, curr: any) => acc + (Number(curr.hours) || 0), 0).toFixed(2) },
     { Field: 'Total Classes Delivered', Value: (data.logs || []).filter((l: any) => l.status === 'Taken' || l.status === 'Compensated' || l.status === 'completed' || l.status === 'partial').length }
@@ -140,8 +154,7 @@ export function exportComplianceReportToXLSX(
 
 /**
  * Export official inspection-ready PDF document of the daily register
- * complete with APNSIR Foundation header, teacher metadata, structured table,
- * and 4-tier signature blocks (Teacher, HOD, Academic Bursar, Principal).
+ * complete with institution header, teacher metadata, room numbers, timings, and 4-tier signature blocks.
  */
 export function exportLogsToPDF(
   logs: Log[],
@@ -184,13 +197,14 @@ export function exportLogsToPDF(
   doc.text(`Institution: ${collegeName} | Department: ${deptName}`, 14, 42);
   doc.text(`Report Generated: ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} | Total Logged Periods: ${logs.length}`, 14, 48);
 
-  // 3. Table Data Mapping using buildEnrichedLogRows
+  // 3. Table Data Mapping integrating Period, Timing & Room
   const enrichedRows = buildEnrichedLogRows(logs, data);
-  const tableHeaders = [['Sl.', 'Date', 'Period', 'Class / Semester', 'Actually Covered', 'Status', 'Hours']];
+  const tableHeaders = [['Sl.', 'Date', 'Period & Timing', 'Room', 'Class / Semester', 'Actually Covered', 'Status', 'Hours']];
   const tableData = enrichedRows.map((r: any, index: number) => [
     index + 1,
     r['Date'],
-    r['Period'],
+    `${r['Period']}\n(${r['Timing']})`,
+    r['Room'],
     r['Class / Semester'],
     r['Topic Actually Covered'] || r['Planned Topic'],
     r['Status'],
@@ -206,21 +220,22 @@ export function exportLogsToPDF(
       fillColor: [30, 58, 138], // Deep Blue 900
       textColor: 255, 
       fontStyle: 'bold', 
-      fontSize: 8.5,
+      fontSize: 8,
       halign: 'center'
     },
     bodyStyles: { 
-      fontSize: 8, 
+      fontSize: 7.5, 
       textColor: [15, 23, 42] 
     },
     columnStyles: {
-      0: { halign: 'center', cellWidth: 10 },
-      1: { halign: 'center', cellWidth: 22 },
-      2: { halign: 'center', cellWidth: 28 },
-      3: { cellWidth: 42 },
-      4: { cellWidth: 50 },
-      5: { halign: 'center', cellWidth: 20 },
-      6: { halign: 'right', cellWidth: 14 }
+      0: { halign: 'center', cellWidth: 8 },
+      1: { halign: 'center', cellWidth: 20 },
+      2: { halign: 'center', cellWidth: 26 },
+      3: { halign: 'center', cellWidth: 16 },
+      4: { cellWidth: 34 },
+      5: { cellWidth: 44 },
+      6: { halign: 'center', cellWidth: 18 },
+      7: { halign: 'right', cellWidth: 14 }
     },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     margin: { left: 14, right: 14 },

@@ -1,20 +1,16 @@
+// src/app/reports/print/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { load, loadProfile, ProfPlanData, UserProfile } from '@/lib/store';
-import { Printer, ArrowLeft } from 'lucide-react';
+import { Printer, ArrowLeft, MapPin } from 'lucide-react';
 
 export default function ReportsPrintPage() {
     const [mounted, setMounted] = useState(false);
     const [d, setD] = useState<ProfPlanData>({
-        courses: [],
-        units: [],
-        topics: [],
-        slots: [],
-        logs: [],
-        holidays: [],
-        classes: []
+        courses: [], units: [], topics: [], slots: [], logs: [], holidays: [], classes: []
     });
     const [profile, setProfile] = useState<UserProfile | null>(null);
 
@@ -40,10 +36,7 @@ export default function ReportsPrintPage() {
             const dateA = String(a.date || '');
             const dateB = String(b.date || '');
             if (dateA !== dateB) return dateA.localeCompare(dateB);
-
-            const startA = String(a.actualStart || '');
-            const startB = String(b.actualStart || '');
-            return startA.localeCompare(startB);
+            return String(a.actualStart || '').localeCompare(String(b.actualStart || ''));
         });
     }, [logs]);
 
@@ -54,9 +47,7 @@ export default function ReportsPrintPage() {
     }, [sortedLogs]);
 
     const totalClassesTaken = useMemo(() => {
-        return sortedLogs.filter(
-            (l: any) => l.status === 'Taken' || l.status === 'Compensated' || l.status === 'completed' || l.status === 'partial'
-        ).length;
+        return sortedLogs.filter((l: any) => l.status === 'Taken' || l.status === 'Compensated' || l.status === 'completed' || l.status === 'partial').length;
     }, [sortedLogs]);
 
     function resolveCourseName(courseId: string) {
@@ -70,9 +61,7 @@ export default function ReportsPrintPage() {
     function resolveClassInfo(log: any) {
         const course: any = courseMap.get(log.courseId);
         const classObj: any = course?.classId ? classMap.get(course.classId) : null;
-        if (classObj) {
-            return `${classObj.name}${classObj.stream ? ` (${classObj.stream})` : ''}`;
-        }
+        if (classObj) return `${classObj.name}${classObj.stream ? ` (${classObj.stream})` : ''}`;
         return log.semester || course?.semester || '—';
     }
 
@@ -90,72 +79,36 @@ export default function ReportsPrintPage() {
     }
 
     if (!mounted) {
-        return (
-            <div className="flex min-h-screen items-center justify-center font-serif text-sm">
-                Preparing printable register...
-            </div>
-        );
+        return <div className="flex min-h-screen items-center justify-center font-serif text-sm">Preparing printable register...</div>;
     }
 
     return (
         <div className="min-h-screen bg-slate-100 p-2 sm:p-6 print:bg-white print:p-0 text-slate-900">
-            {/* INJECTED PRINT-SPECIFIC CSS RULES FOR PHYSICAL A4 LANDSCAPE */}
             <style jsx global>{`
                 @media print {
-                    @page {
-                        size: A4 landscape;
-                        margin: 8mm 10mm 10mm 10mm;
-                    }
-                    body {
-                        background: #ffffff !important;
-                        color: #000000 !important;
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
-                    }
-                    table {
-                        page-break-inside: auto;
-                    }
-                    tr {
-                        page-break-inside: avoid;
-                        page-break-after: auto;
-                    }
-                    thead {
-                        display: table-header-group !important;
-                    }
-                    tfoot {
-                        display: table-footer-group !important;
-                    }
+                    @page { size: A4 landscape; margin: 8mm 10mm 10mm 10mm; }
+                    body { background: #ffffff !important; color: #000000 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                    table { page-break-inside: auto; }
+                    tr { page-break-inside: avoid; page-break-after: auto; }
+                    thead { display: table-header-group !important; }
+                    tfoot { display: table-footer-group !important; }
                 }
             `}</style>
 
-            {/* SCREEN NAVIGATION BAR */}
             <div className="max-w-[297mm] mx-auto mb-4 flex items-center justify-between bg-white px-5 py-3 rounded-2xl border border-slate-300 shadow-sm print:hidden">
-                <Link
-                    href="/reports"
-                    className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-blue-600 transition"
-                >
-                    <ArrowLeft className="w-4 h-4" />
-                    Back to Interactive Reports
+                <Link href="/reports" className="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-blue-600 transition">
+                    <ArrowLeft className="w-4 h-4" /> Back to Interactive Reports
                 </Link>
-
-                <div className="flex items-center gap-3">
-                    <span className="text-xs text-slate-500 hidden sm:inline">
-                        Optimized for A4 Landscape Inspection
-                    </span>
-                    <button
-                        type="button"
-                        onClick={() => window.print()}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl shadow transition transform active:scale-95 cursor-pointer"
-                    >
-                        <Printer className="w-4 h-4" />
-                        Print / Save as PDF
-                    </button>
-                </div>
+                <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-xl shadow transition cursor-pointer"
+                >
+                    <Printer className="w-4 h-4" /> Print / Save as PDF
+                </button>
             </div>
 
-            {/* A4 PRINT CONTAINER */}
             <div className="max-w-[297mm] mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-slate-200 print:shadow-none print:border-none print:p-0 print:m-0">
-                {/* INSTITUTIONAL HEADER */}
                 <header className="border-b-2 border-slate-900 pb-3 mb-3 text-center">
                     <div className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">
                         APNSIR FOUNDATION · Academic Quality Assurance &amp; Departmental Compliance
@@ -163,37 +116,22 @@ export default function ReportsPrintPage() {
                     <h1 className="text-xl font-black uppercase tracking-tight text-slate-950 mt-0.5">
                         {profile?.college || "Teacher's Daily Lesson Plan & Progress Register"}
                     </h1>
-                    <p className="text-xs font-bold text-slate-700 mt-0.5">
-                        Official Inspection &amp; Performance Audit Sheet
-                    </p>
+                    <p className="text-xs font-bold text-slate-700 mt-0.5">Official Inspection &amp; Performance Audit Sheet</p>
 
                     <div className="grid grid-cols-4 gap-2 text-[11px] font-semibold text-slate-800 mt-3 pt-2 border-t border-slate-300 text-left">
-                        <div>
-                            <span className="text-slate-500 font-normal">Educator: </span>
-                            <strong>{profile?.name || 'Academic Faculty'}</strong>
-                        </div>
-                        <div>
-                            <span className="text-slate-500 font-normal">Department: </span>
-                            <strong>{profile?.department || 'English / General'}</strong>
-                        </div>
-                        <div>
-                            <span className="text-slate-500 font-normal">Designation: </span>
-                            <strong>{profile?.designation || 'Lecturer / HOD'}</strong>
-                        </div>
-                        <div className="text-right">
-                            <span className="text-slate-500 font-normal">Classes / Delivered: </span>
-                            <strong>{totalClassesTaken} ({totalDeliveredHours.toFixed(2)} hrs)</strong>
-                        </div>
+                        <div><span className="text-slate-500 font-normal">Educator: </span><strong>{profile?.name || 'Academic Faculty'}</strong></div>
+                        <div><span className="text-slate-500 font-normal">Department: </span><strong>{profile?.department || 'English / General'}</strong></div>
+                        <div><span className="text-slate-500 font-normal">Designation: </span><strong>{profile?.designation || 'Lecturer / HOD'}</strong></div>
+                        <div className="text-right"><span className="text-slate-500 font-normal">Classes / Delivered: </span><strong>{totalClassesTaken} ({totalDeliveredHours.toFixed(2)} hrs)</strong></div>
                     </div>
                 </header>
 
-                {/* AUDIT REGISTER TABLE */}
                 <table className="w-full border-collapse text-left text-[11px] border border-slate-900">
                     <thead className="print:[display:table-header-group]">
                         <tr className="bg-slate-100 border-b border-slate-900 text-slate-950 font-bold uppercase text-[10px]">
                             <th className="py-1.5 px-2 border-r border-slate-900 text-center w-8">Sl.</th>
                             <th className="py-1.5 px-2 border-r border-slate-900 w-20">Date</th>
-                            <th className="py-1.5 px-2 border-r border-slate-900 w-24">Period / Time</th>
+                            <th className="py-1.5 px-2 border-r border-slate-900 w-32">Period, Timing &amp; Room</th>
                             <th className="py-1.5 px-2 border-r border-slate-900 w-36">Class &amp; Paper</th>
                             <th className="py-1.5 px-2 border-r border-slate-900">Planned Topic</th>
                             <th className="py-1.5 px-2 border-r border-slate-900">Actually Covered / Transaction</th>
@@ -205,54 +143,39 @@ export default function ReportsPrintPage() {
                     <tbody>
                         {sortedLogs.length === 0 ? (
                             <tr>
-                                <td colSpan={9} className="py-8 text-center text-slate-400 italic">
-                                    No recorded progress entries found in this register.
-                                </td>
+                                <td colSpan={9} className="py-8 text-center text-slate-400 italic">No recorded progress entries found in this register.</td>
                             </tr>
                         ) : (
                             sortedLogs.map((l: any, index: number) => {
                                 const slot: any = slotMap.get(l.slotId);
+                                const roomNo = l.room || slot?.room || '—';
+                                const timeRange = slot?.start && slot?.end 
+                                    ? `${slot.start} - ${slot.end}` 
+                                    : l.actualStart && l.actualEnd 
+                                    ? `${l.actualStart} - ${l.actualEnd}` 
+                                    : '—';
+
                                 return (
                                     <tr key={l.id} className="border-b border-slate-400 break-inside-avoid">
-                                        <td className="py-1 px-1.5 text-center font-bold border-r border-slate-400">
-                                            {index + 1}
-                                        </td>
-                                        <td className="py-1 px-1.5 font-bold border-r border-slate-400 whitespace-nowrap">
-                                            {l.date}
-                                        </td>
+                                        <td className="py-1 px-1.5 text-center font-bold border-r border-slate-400">{index + 1}</td>
+                                        <td className="py-1 px-1.5 font-bold border-r border-slate-400 whitespace-nowrap">{l.date}</td>
                                         <td className="py-1 px-1.5 border-r border-slate-400 whitespace-nowrap leading-tight">
-                                            <div>{slot?.period ? `Period ${slot.period}` : l.classType || 'Extra'}</div>
-                                            <div className="text-[9px] text-slate-500">
-                                                {l.actualStart || slot?.start || ''} - {l.actualEnd || slot?.end || ''}
-                                            </div>
+                                            <div className="font-bold">{slot?.period ? `Period ${slot.period}` : l.classType || 'Extra'}</div>
+                                            <div className="text-[9px] text-slate-600 font-bold">{timeRange}</div>
+                                            <div className="text-[9px] text-blue-900 font-extrabold">Room: {roomNo}</div>
                                         </td>
                                         <td className="py-1 px-1.5 border-r border-slate-400 leading-tight">
                                             <div className="font-bold">{resolveCourseName(l.courseId)}</div>
-                                            <div className="text-[10px] text-slate-600">
-                                                {resolveClassInfo(l)}
-                                                {resolveCourseCode(l.courseId) && ` • ${resolveCourseCode(l.courseId)}`}
-                                            </div>
+                                            <div className="text-[10px] text-slate-600">{resolveClassInfo(l)} {resolveCourseCode(l.courseId) && `• ${resolveCourseCode(l.courseId)}`}</div>
                                         </td>
-                                        <td className="py-1 px-1.5 border-r border-slate-400 leading-tight">
-                                            {getPlannedTopicName(l)}
-                                        </td>
+                                        <td className="py-1 px-1.5 border-r border-slate-400 leading-tight">{getPlannedTopicName(l)}</td>
                                         <td className="py-1 px-1.5 border-r border-slate-400 leading-tight font-medium">
                                             <div>{getActuallyCovered(l)}</div>
-                                            {l.remarks && (
-                                                <div className="text-[9px] text-slate-500 italic">
-                                                    Note: {l.remarks}
-                                                </div>
-                                            )}
+                                            {l.remarks && <div className="text-[9px] text-slate-500 italic">Note: {l.remarks}</div>}
                                         </td>
-                                        <td className="py-1 px-1.5 text-center border-r border-slate-400 font-bold whitespace-nowrap">
-                                            {l.status || 'Taken'}
-                                        </td>
-                                        <td className="py-1 px-1.5 text-right font-bold border-r border-slate-400 whitespace-nowrap">
-                                            {Number(l.hours || 0).toFixed(2)}
-                                        </td>
-                                        <td className="py-1 px-1.5 text-center border-slate-400 whitespace-nowrap font-medium">
-                                            {l.attendance ?? '—'}
-                                        </td>
+                                        <td className="py-1 px-1.5 text-center border-r border-slate-400 font-bold whitespace-nowrap">{l.status || 'Taken'}</td>
+                                        <td className="py-1 px-1.5 text-right font-bold border-r border-slate-400 whitespace-nowrap">{Number(l.hours || 0).toFixed(2)}</td>
+                                        <td className="py-1 px-1.5 text-center border-slate-400 whitespace-nowrap font-medium">{l.attendance ?? '—'}</td>
                                     </tr>
                                 );
                             })
@@ -260,7 +183,7 @@ export default function ReportsPrintPage() {
                     </tbody>
                 </table>
 
-                {/* 4-TIER OFFICIAL SIGNATURE & VERIFICATION BLOCK */}
+                {/* 4-TIER SIGNATURE BLOCK */}
                 <div className="mt-14 pt-4 border-t-2 border-slate-900 grid grid-cols-4 gap-4 text-center text-xs font-bold text-slate-900 break-inside-avoid">
                     <div>
                         <div className="h-10"></div>
@@ -292,7 +215,6 @@ export default function ReportsPrintPage() {
                     </div>
                 </div>
 
-                {/* FOOTER */}
                 <footer className="mt-6 text-center text-[9px] text-slate-500">
                     Generated via ProfPlan · OdishaTeachers.com · Compliant with Institutional Record Verification Standards
                 </footer>
