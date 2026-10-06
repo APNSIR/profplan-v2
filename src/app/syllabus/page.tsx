@@ -1,3 +1,4 @@
+// src/app/syllabus/page.tsx (Line Count: ~2057 - Full Fidelity with ExpandedCourses State Defined)
 'use client';
 
 import React, {
@@ -32,8 +33,11 @@ import {
     BookMarked,
     ListFilter,
     CheckCircle2,
-    MousePointerClick,
+    Settings,
     BookCheck,
+    PlusCircle,
+    Pencil,
+    ChevronUp
 } from 'lucide-react';
 
 import {
@@ -126,19 +130,19 @@ function SyllabusContent() {
     const [selectedCourseIdForStudio, setSelectedCourseIdForStudio] = useState<string | null>(null);
     const [selectedUnitIdForStudio, setSelectedUnitIdForStudio] = useState<string | null>(null);
 
-    // Inline Subject, Unit & Topic Edit States
-    const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
-    const [editingCourseName, setEditingCourseName] = useState('');
-    const [editingCourseCode, setEditingCourseCode] = useState('');
-    const [editingCourseHours, setEditingCourseHours] = useState('0');
+    // Manage Subject Studio Modal State
+    const [isManageSubjectModalOpen, setIsManageSubjectModalOpen] = useState(false);
+    const [managingCourseId, setManagingCourseId] = useState<string | null>(null);
+    const [editCourseNameVal, setEditCourseNameVal] = useState('');
+    const [editCourseCodeVal, setEditCourseCodeVal] = useState('');
+    const [editCourseHoursVal, setEditCourseHoursVal] = useState('45');
 
-    const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
-    const [editingUnitName, setEditingUnitName] = useState('');
-    const [editingUnitNumber, setEditingUnitNumber] = useState('1');
+    // Idea 1: Expanded Subject Card State for Overview Accordion View
+    const [expandedSubjectOverviewId, setExpandedSubjectOverviewId] = useState<string | null>(null);
 
-    const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
-    const [editingTopicName, setEditingTopicName] = useState('');
-    const [editingTopicPeriods, setEditingTopicPeriods] = useState('2');
+    // Mobile Drawer State for Adding/Editing Units & Topics
+    const [isUnitDrawerOpen, setIsUnitDrawerOpen] = useState(false);
+    const [isTopicDrawerOpen, setIsTopicDrawerOpen] = useState(false);
 
     // Inline Class Edit States
     const [editingClassId, setEditingClassId] = useState<string | null>(null);
@@ -150,8 +154,6 @@ function SyllabusContent() {
 
     const [isClassModalOpen, setIsClassModalOpen] = useState(false);
     const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
-    const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
-    const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
     const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
 
     /* =====================================================
@@ -166,11 +168,10 @@ function SyllabusContent() {
     const [courseCode, setCourseCode] = useState('');
     const [courseHours, setCourseHours] = useState('0');
 
-    const [targetCourseIdForUnit, setTargetCourseIdForUnit] = useState('');
     const [unitNumber, setUnitNumber] = useState('');
     const [unitName, setUnitName] = useState('');
+    const [unitHours, setUnitHours] = useState('');
 
-    const [targetUnitIdForTopic, setTargetUnitIdForTopic] = useState('');
     const [topicName, setTopicName] = useState('');
     const [plannedClasses, setPlannedClasses] = useState('2');
 
@@ -269,23 +270,65 @@ function SyllabusContent() {
         window.dispatchEvent(new Event('profplan-change'));
     };
 
-    const toggleCourse = (courseId: string) => {
-        setExpandedCourses((previous) => ({
-            ...previous,
-            [courseId]: !(previous[courseId] ?? true),
-        }));
-    };
-
-    const toggleUnit = (unitId: string) => {
-        setExpandedUnits((previous) => ({
-            ...previous,
-            [unitId]: !(previous[unitId] ?? true),
-        }));
-    };
-
     /* =====================================================
         EDIT & DELETE HANDLERS
     ===================================================== */
+    const handleDeleteCourse = (course: Course) => {
+        const confirmed = window.confirm(`Are you sure you want to delete subject "${course.name}" (${course.code || 'PAPER'})?\n\nThis will permanently remove all units, topics, and teaching hours associated with this subject.`);
+        if (!confirmed) return;
+
+        const targetUnits = (data.units || []).filter((u: any) => String(u.courseId) === String(course.id));
+        const unitIds = new Set(targetUnits.map((u: any) => String(u.id)));
+
+        const updatedCourses = (data.courses || []).filter((c: any) => String(c.id) !== String(course.id));
+        const updatedUnits = (data.units || []).filter((u: any) => String(u.courseId) !== String(course.id));
+        const updatedTopics = (data.topics || []).filter((t: any) => !unitIds.has(String(t.unitId)) && String(t.courseId) !== String(course.id));
+
+        persist({
+            ...data,
+            courses: updatedCourses,
+            units: updatedUnits,
+            topics: updatedTopics,
+        });
+
+        if (selectedCourseIdForStudio === course.id) {
+            setSelectedCourseIdForStudio(null);
+            setViewMode('overview');
+        }
+        if (expandedSubjectOverviewId === course.id) {
+            setExpandedSubjectOverviewId(null);
+        }
+        setIsManageSubjectModalOpen(false);
+    };
+
+    const handleSaveCourseEdits = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!managingCourseId) return;
+
+        const name = editCourseNameVal.trim();
+        const code = editCourseCodeVal.trim();
+        if (!name || !code) {
+            alert('Please enter Subject Name and Paper Code.');
+            return;
+        }
+
+        const updatedCourses = (data.courses || []).map((c: any) => {
+            if (String(c.id) === String(managingCourseId)) {
+                return {
+                    ...c,
+                    name,
+                    code,
+                    hours: Number(editCourseHoursVal) || 0,
+                    targetHours: Number(editCourseHoursVal) || 0,
+                };
+            }
+            return c;
+        });
+
+        persist({ ...data, courses: updatedCourses });
+        setIsManageSubjectModalOpen(false);
+    };
+
     const handleDeleteUnit = (unit: any) => {
         const confirmed = window.confirm(`Delete "${unit.name ?? unit.title}" and all topics inside it?`);
         if (!confirmed) return;
@@ -464,12 +507,8 @@ function SyllabusContent() {
 
     const handleDeleteClass = (classItem: ClassItem) => {
         const confirmed = window.confirm(
-            `Are you sure you want to delete workspace "${classItem.name}"?
-
-` +
-            `This will permanently remove all associated subjects, units, topics, and timetable slots.
-
-` +
+            `Are you sure you want to delete workspace "${classItem.name}"?\n\n` +
+            `This will permanently remove all associated subjects, units, topics, and timetable slots.\n\n` +
             `Historical teaching records / Reports will be preserved.`
         );
         if (!confirmed) return;
@@ -551,40 +590,16 @@ function SyllabusContent() {
         };
 
         persist(updatedData);
-        setExpandedCourses((previous) => ({ ...previous, [newCourse.id]: true }));
+        setExpandedCourses((previous: Record<string, boolean>) => ({ ...previous, [newCourse.id]: true }));
         setIsCourseModalOpen(false);
     };
 
-    const openUnitModal = (courseId?: string) => {
-        if (!activeClass) {
-            alert('Please select a Class / Semester first.');
-            return;
-        }
-
-        const target = courseId || activeClassCourses[0]?.id || '';
-        if (!target) {
-            alert('Please create a subject first.');
-            return;
-        }
-
-        setTargetCourseIdForUnit(target);
-        const units = getCourseUnits(target);
-        setUnitNumber(String(units.length + 1));
-        setUnitName('');
-        setIsUnitModalOpen(true);
-    };
-
-    const openTopicModal = (unitId?: string) => {
-        const target = unitId || activeStats.units[0]?.id || '';
-        if (!target) {
-            alert('Please create a Unit first.');
-            return;
-        }
-
-        setTargetUnitIdForTopic(target);
-        setTopicName('');
-        setPlannedClasses('2');
-        setIsTopicModalOpen(true);
+    const openManageSubjectModal = (course: Course) => {
+        setManagingCourseId(course.id);
+        setEditCourseNameVal(course.name || '');
+        setEditCourseCodeVal(course.code || '');
+        setEditCourseHoursVal(String(course.hours ?? course.targetHours ?? 45));
+        setIsManageSubjectModalOpen(true);
     };
 
     const openUnitStudio = (courseId: string) => {
@@ -600,6 +615,24 @@ function SyllabusContent() {
         setViewMode('topics-studio');
     };
 
+    const openUnitModal = (courseId?: string) => {
+        const target = courseId || activeClassCourses[0]?.id;
+        if (target) {
+            openUnitStudio(target);
+        } else {
+            alert('Please create a Subject first.');
+        }
+    };
+
+    const openTopicModal = (courseId?: string) => {
+        const target = courseId || activeClassCourses[0]?.id;
+        if (target) {
+            openTopicStudio(target);
+        } else {
+            alert('Please create a Subject first.');
+        }
+    };
+
     const handleSaveUnitFromStudio = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedCourseIdForStudio) return;
@@ -612,6 +645,7 @@ function SyllabusContent() {
 
         const existingUnits = getCourseUnits(selectedCourseIdForStudio);
         const number = Number(unitNumber) || existingUnits.length + 1;
+        const targetHours = parseFloat(unitHours);
 
         const newUnit: Unit = {
             id: createId('unit'),
@@ -620,6 +654,7 @@ function SyllabusContent() {
             title: name,
             unitNumber: number,
             order: existingUnits.length,
+            targetHours: !isNaN(targetHours) && targetHours > 0 ? targetHours : undefined,
         } as Unit;
 
         const updatedData = {
@@ -629,7 +664,9 @@ function SyllabusContent() {
 
         persist(updatedData);
         setUnitName('');
+        setUnitHours('');
         setUnitNumber(String(existingUnits.length + 2));
+        setIsUnitDrawerOpen(false);
     };
 
     const handleSaveTopicFromStudio = (e: React.FormEvent) => {
@@ -661,6 +698,7 @@ function SyllabusContent() {
         persist(updatedData);
         setTopicName('');
         setPlannedClasses('2');
+        setIsTopicDrawerOpen(false);
     };
 
     const openCloneModal = () => {
@@ -755,27 +793,21 @@ function SyllabusContent() {
     ===================================================== */
     if (viewMode !== 'overview' && currentCourseForStudio) {
         return (
-            <div className="space-y-8 pb-20 max-w-5xl mx-auto px-4 sm:px-6 pt-2 animate-in fade-in">
+            <div className="space-y-8 pb-28 max-w-5xl mx-auto px-4 sm:px-6 pt-2 animate-in fade-in">
                 
-                {/* BACK TO SYLLABUS OVERVIEW BUTTON */}
-                <div className="flex items-center justify-between pt-2">
+                {/* FLOATING QUICK-RETURN STICKY BACK BAR (Idea 3) */}
+                <div className="sticky top-20 z-40 flex items-center justify-between bg-white/90 backdrop-blur-md px-4 py-3 rounded-2xl border border-slate-200 shadow-md">
                     <button
                         type="button"
                         onClick={() => setViewMode('overview')}
-                        className="group inline-flex items-center gap-3 px-4 sm:px-5 py-2.5 rounded-2xl bg-white hover:bg-blue-50/70 border-2 border-slate-200 hover:border-blue-400/60 shadow-sm transition cursor-pointer"
+                        className="group inline-flex items-center gap-2.5 px-4 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white font-black text-xs shadow-sm transition cursor-pointer"
                     >
-                        <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-100 text-blue-800 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-                        </div>
-                        <div className="text-left">
-                            <span className="block text-xs font-black text-slate-800 tracking-tight">
-                                Back to Syllabus Overview
-                            </span>
-                            <span className="block text-[10px] font-semibold text-slate-400 -mt-0.5">
-                                Return to Class Workspace
-                            </span>
-                        </div>
+                        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+                        <span>← Back to Syllabus Overview</span>
                     </button>
+                    <span className="text-xs font-bold text-slate-500 hidden sm:inline">
+                        Studio: <strong className="text-slate-900">{currentCourseForStudio.name}</strong>
+                    </span>
                 </div>
 
                 {/* SIGNATURE APNSIR DEEP BLUE GRADIENT BANNER WITH LOGO */}
@@ -841,9 +873,9 @@ function SyllabusContent() {
 
                 {/* VIEW 1: UNITS STUDIO */}
                 {viewMode === 'units-studio' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in">
-                        {/* LEFT FORM: ADD UNIT */}
-                        <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-md space-y-4 h-fit">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in pb-16">
+                        {/* DESKTOP LEFT FORM: ADD UNIT */}
+                        <div className="hidden lg:block rounded-[28px] border border-slate-200 bg-white p-6 shadow-md space-y-4 h-fit sticky top-36">
                             <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
                                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-700 font-black">
                                     <Layers className="w-5 h-5" />
@@ -878,7 +910,21 @@ function SyllabusContent() {
                                         value={unitName}
                                         onChange={(e) => setUnitName(e.target.value)}
                                         required
-                                        autoFocus
+                                        className="w-full rounded-xl border-2 border-slate-200 px-4 py-2.5 text-sm font-semibold outline-none focus:border-violet-600 focus:ring-4 focus:ring-violet-100 text-slate-900"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                                        Total Planned Hours (Optional)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.5"
+                                        value={unitHours}
+                                        onChange={(e) => setUnitHours(e.target.value)}
+                                        placeholder="e.g. 15"
                                         className="w-full rounded-xl border-2 border-slate-200 px-4 py-2.5 text-sm font-semibold outline-none focus:border-violet-600 focus:ring-4 focus:ring-violet-100 text-slate-900"
                                     />
                                 </div>
@@ -894,16 +940,31 @@ function SyllabusContent() {
 
                         {/* RIGHT LIST: EXISTING UNITS WITH TOPIC JUMP */}
                         <div className="lg:col-span-2 space-y-3">
-                            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 px-1">
-                                Configured Units for {currentCourseForStudio.name} ({studioUnits.length})
-                            </h3>
+                            <div className="flex items-center justify-between px-1">
+                                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                                    Configured Units for {currentCourseForStudio.name} ({studioUnits.length})
+                                </h3>
+                                {/* Mobile Add Unit Trigger */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setUnitNumber(String(studioUnits.length + 1));
+                                        setUnitName('');
+                                        setUnitHours('');
+                                        setIsUnitDrawerOpen(true);
+                                    }}
+                                    className="lg:hidden inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-violet-600 text-white text-xs font-black rounded-xl shadow cursor-pointer"
+                                >
+                                    <Plus className="w-3.5 h-3.5" /> + Add Unit
+                                </button>
+                            </div>
 
                             {studioUnits.length === 0 ? (
                                 <div className="rounded-[28px] border-2 border-dashed border-slate-300 bg-white p-8 text-center shadow-xs">
                                     <Layers className="mx-auto h-8 w-8 text-violet-400 animate-pulse" />
                                     <h4 className="mt-2 text-sm font-black text-slate-900">No Units Created Yet</h4>
                                     <p className="mt-1 text-xs text-slate-500">
-                                        Use the form on the left to create your first unit.
+                                        Use the form on the left (or button on mobile) to create your first unit.
                                     </p>
                                 </div>
                             ) : (
@@ -920,7 +981,9 @@ function SyllabusContent() {
                                                 </span>
                                                 <div>
                                                     <h4 className="text-sm font-black text-slate-900">{unit.name || unit.title}</h4>
-                                                    <p className="text-xs text-slate-500 font-medium mt-0.5">{uTopics.length} teaching topics mapped</p>
+                                                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                                        {uTopics.length} teaching topics mapped {unit.targetHours ? `• ${unit.targetHours}h planned` : ''}
+                                                    </p>
                                                 </div>
                                             </div>
 
@@ -946,14 +1009,123 @@ function SyllabusContent() {
                                 })
                             )}
                         </div>
+
+                        {/* MOBILE SLIDE-UP DRAWER FOR ADDING UNITS */}
+                        <div
+                            className={`fixed inset-0 z-[70] transform transition-transform duration-300 ease-in-out lg:hidden ${
+                                isUnitDrawerOpen ? 'translate-y-0' : 'translate-y-full'
+                            }`}
+                        >
+                            <div
+                                className={`absolute inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300 ${
+                                    isUnitDrawerOpen ? 'opacity-100' : 'opacity-0'
+                                }`}
+                                onClick={() => setIsUnitDrawerOpen(false)}
+                            />
+
+                            <div className="absolute bottom-0 left-0 right-0 max-h-[90vh] overflow-y-auto rounded-t-[32px] bg-white p-6 sm:p-8 shadow-2xl border-t-2 border-violet-200 space-y-4">
+                                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                                    <div className="flex items-center gap-2">
+                                        <PlusCircle className="w-5 h-5 text-violet-600" />
+                                        <h3 className="text-sm font-black uppercase tracking-wider text-slate-900">
+                                            Add New Unit / Module
+                                        </h3>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsUnitDrawerOpen(false)}
+                                        className="p-2 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer"
+                                    >
+                                        <X className="h-5 w-5" />
+                                    </button>
+                                </div>
+
+                                <form onSubmit={handleSaveUnitFromStudio} className="space-y-4">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">
+                                            Unit Number
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={unitNumber}
+                                            onChange={(e) => setUnitNumber(e.target.value)}
+                                            className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-violet-600 focus:ring-4 focus:ring-violet-100 text-slate-900"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">
+                                            Unit Title *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. Literary Movements"
+                                            value={unitName}
+                                            onChange={(e) => setUnitName(e.target.value)}
+                                            required
+                                            className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-violet-600 focus:ring-4 focus:ring-violet-100 text-slate-900"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">
+                                            Total Planned Hours (Optional)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.5"
+                                            value={unitHours}
+                                            onChange={(e) => setUnitHours(e.target.value)}
+                                            placeholder="e.g. 15"
+                                            className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-violet-600 focus:ring-4 focus:ring-violet-100 text-slate-900"
+                                        />
+                                    </div>
+
+                                    <div className="flex gap-3 pt-2 border-t border-slate-100">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsUnitDrawerOpen(false)}
+                                            className="flex-1 px-6 py-3 text-xs font-black text-slate-600 hover:bg-slate-100 rounded-2xl transition cursor-pointer text-center"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="flex-1 px-6 py-3 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white font-black text-xs uppercase tracking-wider transition cursor-pointer text-center"
+                                        >
+                                            Save New Unit
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        {/* MOBILE STICKY FOOTER BUTTON (Idea 2) */}
+                        <div className={`fixed bottom-0 left-0 right-0 p-4 pb-safe bg-white/95 backdrop-blur-sm border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.03)] transition-opacity duration-300 lg:hidden z-[60] ${isUnitDrawerOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setUnitNumber(String(studioUnits.length + 1));
+                                    setUnitName('');
+                                    setUnitHours('');
+                                    setIsUnitDrawerOpen(true);
+                                }}
+                                className="flex w-full items-center justify-center gap-3 rounded-2xl bg-violet-600 px-6 py-4 text-white font-black text-xs uppercase tracking-wider shadow-xl shadow-violet-100 transition active:scale-[0.98] cursor-pointer"
+                            >
+                                <Plus className="w-5 h-5" />
+                                Add New Unit / Module
+                            </button>
+                        </div>
                     </div>
                 )}
 
                 {/* VIEW 2: TOPICS STUDIO */}
                 {viewMode === 'topics-studio' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in">
-                        {/* LEFT FORM: ADD TOPIC */}
-                        <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-md space-y-4 h-fit">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in pb-16">
+                        {/* DESKTOP LEFT FORM: ADD TOPIC */}
+                        <div className="hidden lg:block rounded-[28px] border border-slate-200 bg-white p-6 shadow-md space-y-4 h-fit sticky top-36">
                             <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
                                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700 font-black">
                                     <Target className="w-5 h-5" />
@@ -992,7 +1164,6 @@ function SyllabusContent() {
                                         value={topicName}
                                         onChange={(e) => setTopicName(e.target.value)}
                                         required
-                                        autoFocus
                                         className="w-full rounded-xl border-2 border-slate-200 px-4 py-2.5 text-sm font-semibold outline-none focus:border-amber-600 focus:ring-4 focus:ring-amber-100 text-slate-900"
                                     />
                                 </div>
@@ -1024,15 +1195,32 @@ function SyllabusContent() {
                         <div className="lg:col-span-2 space-y-4">
                             <div className="flex items-center justify-between px-1">
                                 <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
-                                    Topics Breakdown for {currentCourseForStudio.name}
+                                    Topics Breakdown for {currentCourseForStudio.name} ({studioUnits.reduce((acc, u) => acc + getUnitTopics(u.id).length, 0)})
                                 </h3>
-                                <button
-                                    type="button"
-                                    onClick={() => setViewMode('units-studio')}
-                                    className="text-xs font-extrabold text-blue-600 hover:underline cursor-pointer"
-                                >
-                                    + Manage Units
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    {/* Mobile Add Topic Trigger */}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (studioUnits.length > 0 && !selectedUnitIdForStudio) {
+                                                setSelectedUnitIdForStudio(studioUnits[0].id);
+                                            }
+                                            setTopicName('');
+                                            setPlannedClasses('2');
+                                            setIsTopicDrawerOpen(true);
+                                        }}
+                                        className="lg:hidden inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 text-white text-xs font-black rounded-xl shadow cursor-pointer"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" /> + Add Topic
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setViewMode('units-studio')}
+                                        className="text-xs font-extrabold text-blue-600 hover:underline cursor-pointer"
+                                    >
+                                        + Manage Units
+                                    </button>
+                                </div>
                             </div>
 
                             {studioUnits.length === 0 ? (
@@ -1060,7 +1248,7 @@ function SyllabusContent() {
 
                                             {uTopics.length === 0 ? (
                                                 <div className="p-3 bg-slate-50 rounded-xl text-center text-xs text-slate-400 font-medium">
-                                                    No topics in this unit yet. Use the form on the left to add topics.
+                                                    No topics in this unit yet. Use the form on the left (or bottom on mobile) to add topics.
                                                 </div>
                                             ) : (
                                                 <div className="space-y-1.5 pt-1">
@@ -1088,6 +1276,120 @@ function SyllabusContent() {
                                     );
                                 })
                             )}
+                        </div>
+
+                        {/* MOBILE SLIDE-UP DRAWER FOR ADDING TOPICS (Idea 2) */}
+                        <div
+                            className={`fixed inset-0 z-[70] transform transition-transform duration-300 ease-in-out lg:hidden ${
+                                isTopicDrawerOpen ? 'translate-y-0' : 'translate-y-full'
+                            }`}
+                        >
+                            <div
+                                className={`absolute inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300 ${
+                                    isTopicDrawerOpen ? 'opacity-100' : 'opacity-0'
+                                }`}
+                                onClick={() => setIsTopicDrawerOpen(false)}
+                            />
+
+                            <div className="absolute bottom-0 left-0 right-0 max-h-[90vh] overflow-y-auto rounded-t-[32px] bg-white p-6 sm:p-8 shadow-2xl border-t-2 border-amber-200 space-y-4">
+                                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                                    <div className="flex items-center gap-2">
+                                        <PlusCircle className="w-5 h-5 text-amber-600" />
+                                        <h3 className="text-sm font-black uppercase tracking-wider text-slate-900">
+                                            Add Teaching Topic
+                                        </h3>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsTopicDrawerOpen(false)}
+                                        className="p-2 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer"
+                                    >
+                                        <X className="h-5 w-5" />
+                                    </button>
+                                </div>
+
+                                <form onSubmit={handleSaveTopicFromStudio} className="space-y-4">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">
+                                            Select Unit *
+                                        </label>
+                                        <select
+                                            value={selectedUnitIdForStudio || ''}
+                                            onChange={(e) => setSelectedUnitIdForStudio(e.target.value)}
+                                            className="w-full rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-amber-600 focus:ring-4 focus:ring-amber-100 text-slate-900 cursor-pointer"
+                                        >
+                                            {studioUnits.map((u: any) => (
+                                                <option key={u.id} value={u.id} className="text-slate-900 font-bold bg-white">
+                                                    U{u.unitNumber || 1} — {u.name || u.title}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">
+                                            Topic Title *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. Modernist Poetry Analysis"
+                                            value={topicName}
+                                            onChange={(e) => setTopicName(e.target.value)}
+                                            required
+                                            className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-amber-600 focus:ring-4 focus:ring-amber-100 text-slate-900"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 mb-1.5">
+                                            Planned Teaching Periods
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={plannedClasses}
+                                            onChange={(e) => setPlannedClasses(e.target.value)}
+                                            className="w-full rounded-xl border-2 border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-amber-600 focus:ring-4 focus:ring-amber-100 text-slate-900"
+                                        />
+                                    </div>
+
+                                    <div className="flex gap-3 pt-2 border-t border-slate-100">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsTopicDrawerOpen(false)}
+                                            className="flex-1 px-6 py-3 text-xs font-black text-slate-600 hover:bg-slate-100 rounded-2xl transition cursor-pointer text-center"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={!selectedUnitIdForStudio}
+                                            className="flex-1 px-6 py-3 rounded-2xl bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-black text-xs uppercase tracking-wider transition cursor-pointer text-center"
+                                        >
+                                            Save &amp; Add Topic
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        {/* MOBILE STICKY FOOTER BUTTON FOR TOPICS (Idea 2) */}
+                        <div className={`fixed bottom-0 left-0 right-0 p-4 pb-safe bg-white/95 backdrop-blur-sm border-t border-slate-200 shadow-[0_-4px_12px_rgba(0,0,0,0.03)] transition-opacity duration-300 lg:hidden z-[60] ${isTopicDrawerOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (studioUnits.length > 0 && !selectedUnitIdForStudio) {
+                                        setSelectedUnitIdForStudio(studioUnits[0].id);
+                                    }
+                                    setTopicName('');
+                                    setPlannedClasses('2');
+                                    setIsTopicDrawerOpen(true);
+                                }}
+                                className="flex w-full items-center justify-center gap-3 rounded-2xl bg-amber-600 px-6 py-4 text-white font-black text-xs uppercase tracking-wider shadow-xl shadow-amber-100 transition active:scale-[0.98] cursor-pointer"
+                            >
+                                <Plus className="w-5 h-5" />
+                                Add Teaching Topic
+                            </button>
                         </div>
                     </div>
                 )}
@@ -1536,7 +1838,7 @@ function SyllabusContent() {
                                     {activeStats.units.length > 0 && (
                                         <button
                                             type="button"
-                                            onClick={() => openTopicModal(activeStats.units[0].id)}
+                                            onClick={() => openTopicModal(activeClassCourses[0]?.id)}
                                             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-black text-[11px] uppercase rounded-xl shadow cursor-pointer transition"
                                         >
                                             <Target className="w-3.5 h-3.5" /> Add Topic to Unit
@@ -1551,7 +1853,7 @@ function SyllabusContent() {
                             </div>
                         )}
 
-                        {/* UPGRADED SUBJECT GRADIENT PANELS WITH FROSTED GLASS UNIT & TOPIC BADGES OPENING DEDICATED APNSIR STUDIO */}
+                        {/* UPGRADED SUBJECT PANELS WITH CLEAN "MANAGE SUBJECT" BUTTON */}
                         <div className="space-y-4 pt-2">
                             <div className="flex items-center justify-between px-1">
                                 <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
@@ -1593,11 +1895,19 @@ function SyllabusContent() {
 
                                         const isEmptyUnits = unitCount === 0;
                                         const isEmptyTopics = topicCount === 0;
+                                        const isExpanded = expandedSubjectOverviewId === course.id;
 
                                         return (
                                             <div
                                                 key={course.id}
-                                                className="group relative overflow-hidden rounded-3xl border border-slate-200/90 bg-gradient-to-r from-white via-slate-50/80 to-white p-5 md:p-6 shadow-md transition-all hover:border-blue-300 hover:shadow-lg"
+                                                onClick={() => {
+                                                    setExpandedSubjectOverviewId(isExpanded ? null : course.id);
+                                                }}
+                                                className={`group relative overflow-hidden rounded-3xl border transition-all cursor-pointer ${
+                                                    isExpanded
+                                                        ? 'border-blue-500 bg-blue-50/20 shadow-lg ring-2 ring-blue-300/50'
+                                                        : 'border-slate-200/90 bg-gradient-to-r from-white via-slate-50/80 to-white shadow-md hover:border-blue-300 hover:shadow-lg'
+                                                } p-5 md:p-6`}
                                             >
                                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                                                     {/* SUBJECT TITLE & META */}
@@ -1606,8 +1916,11 @@ function SyllabusContent() {
                                                             <span className="rounded-md bg-blue-100 px-2.5 py-0.5 text-[10px] font-black text-blue-800 ring-1 ring-blue-300">
                                                                 {course.code || 'PAPER'}
                                                             </span>
-                                                            <h4 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                                                            <h4 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
                                                                 {course.name}
+                                                                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 flex items-center gap-1">
+                                                                    {isExpanded ? 'Collapse ▴' : 'Expand Overview ▾'}
+                                                                </span>
                                                             </h4>
                                                         </div>
                                                         <p className="text-xs text-slate-500 font-medium mt-1">
@@ -1615,8 +1928,11 @@ function SyllabusContent() {
                                                         </p>
                                                     </div>
 
-                                                    {/* FROSTED GLASS UNIT & TOPIC BADGES OPENING THE DEDICATED APNSIR STUDIO */}
-                                                    <div className="flex items-center gap-2.5 flex-wrap">
+                                                    {/* COMPACT BUTTON GROUP WITH "MANAGE SUBJECT" STUDIO TRIGGER */}
+                                                    <div
+                                                        className="flex items-center gap-2.5 flex-wrap"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
                                                         {/* UNIT BADGE -> OPENS UNITS STUDIO */}
                                                         <button
                                                             type="button"
@@ -1660,8 +1976,76 @@ function SyllabusContent() {
                                                                 </span>
                                                             </div>
                                                         </button>
+
+                                                        {/* MANAGE SUBJECT BUTTON (EDIT / RENAME / DELETE) */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openManageSubjectModal(course)}
+                                                            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-900 hover:bg-blue-800 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xs transition cursor-pointer border border-blue-700/50"
+                                                            title="Edit Subject Name, Code or Delete"
+                                                        >
+                                                            <Settings className="w-4 h-4 text-amber-300" />
+                                                            Manage Subject
+                                                        </button>
                                                     </div>
                                                 </div>
+
+                                                {/* EXPANDED SUBJECT OVERVIEW ACCORDION */}
+                                                {isExpanded && (
+                                                    <div
+                                                        className="mt-5 pt-4 border-t border-slate-200 space-y-3 animate-in fade-in duration-200"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <h5 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                                                                Curriculum Units &amp; Topics Preview
+                                                            </h5>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openUnitStudio(course.id)}
+                                                                className="text-xs font-extrabold text-blue-600 hover:underline cursor-pointer"
+                                                            >
+                                                                Open Full Studio →
+                                                            </button>
+                                                        </div>
+
+                                                        {courseUnits.length === 0 ? (
+                                                            <div className="p-4 bg-slate-50 rounded-2xl text-center text-xs text-slate-500 font-medium border border-dashed border-slate-200">
+                                                                No units created yet for this subject. Click &quot;Units Studio&quot; above to add units.
+                                                            </div>
+                                                        ) : (
+                                                            <div className="space-y-2">
+                                                                {courseUnits.map((u: any) => {
+                                                                    const uTopics = getUnitTopics(u.id);
+                                                                    return (
+                                                                        <div key={u.id} className="rounded-2xl bg-white p-3.5 border border-slate-200 shadow-2xs space-y-2">
+                                                                            <div className="flex items-center justify-between">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="px-2 py-0.5 rounded bg-indigo-950 text-white text-[10px] font-black">
+                                                                                        U{u.unitNumber || 1}
+                                                                                    </span>
+                                                                                    <span className="text-xs font-black text-slate-900">{u.name || u.title}</span>
+                                                                                </div>
+                                                                                <span className="text-[10px] font-bold text-slate-500">{uTopics.length} topics</span>
+                                                                            </div>
+
+                                                                            {uTopics.length > 0 && (
+                                                                                <div className="pl-6 space-y-1">
+                                                                                    {uTopics.map((t: any, tIdx: number) => (
+                                                                                        <div key={t.id} className="text-[11px] font-semibold text-slate-700 flex items-center justify-between">
+                                                                                            <span>• {tIdx + 1}. {t.name || t.title}</span>
+                                                                                            <span className="text-[9px] text-blue-700 font-extrabold bg-blue-50 px-1.5 py-0.5 rounded">{t.plannedClasses || 2}p</span>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -1676,21 +2060,129 @@ function SyllabusContent() {
                 MODALS
             ===================================================== */}
 
+            {/* MANAGE SUBJECT STUDIO MODAL */}
+            {isManageSubjectModalOpen && managingCourseId && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md animate-in fade-in"
+                    onMouseDown={(e) => {
+                        if (e.target === e.currentTarget) {
+                            setIsManageSubjectModalOpen(false);
+                        }
+                    }}
+                >
+                    <div className="w-full max-w-lg rounded-[32px] border border-slate-200 bg-white p-6 sm:p-8 shadow-2xl animate-in fade-in zoom-in-95 space-y-6">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                            <div className="flex items-center gap-3.5">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-900 to-indigo-950 text-white shadow-md">
+                                    <Settings className="h-6 w-6 text-amber-300" />
+                                </div>
+                                <div>
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                                        APNSIR Subject Studio
+                                    </div>
+                                    <h3 className="text-lg font-black text-slate-900">
+                                        Manage &amp; Edit Subject
+                                    </h3>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setIsManageSubjectModalOpen(false)}
+                                className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 cursor-pointer transition"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSaveCourseEdits} className="space-y-4">
+                            <div>
+                                <label className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-700">
+                                    Subject / Course Name *
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editCourseNameVal}
+                                    onChange={(e) => setEditCourseNameVal(e.target.value)}
+                                    placeholder="e.g. Value Added Course / Environmental Studies"
+                                    required
+                                    className="w-full rounded-2xl border-2 border-slate-200 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition"
+                                />
+                                <p className="mt-1 text-[11px] text-slate-400 font-medium">
+                                    Supports NEP 2020 Value Added Courses (VAC) and Skill Enhancement Courses (SEC).
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-700">
+                                        Paper Code *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={editCourseCodeVal}
+                                        onChange={(e) => setEditCourseCodeVal(e.target.value)}
+                                        placeholder="e.g. VAC-101"
+                                        required
+                                        className="w-full rounded-2xl border-2 border-slate-200 px-4 py-3 text-sm font-bold uppercase text-slate-900 outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-700">
+                                        Target Lecture Hours
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={editCourseHoursVal}
+                                        onChange={(e) => setEditCourseHoursVal(e.target.value)}
+                                        placeholder="e.g. 45"
+                                        className="w-full rounded-2xl border-2 border-slate-200 px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between border-t border-slate-100 pt-5 mt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const courseObj = data.courses.find((c: any) => c.id === managingCourseId);
+                                        if (courseObj) handleDeleteCourse(courseObj);
+                                    }}
+                                    className="inline-flex items-center gap-2 px-4 py-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-black text-xs uppercase tracking-wider rounded-2xl border border-rose-200 transition cursor-pointer"
+                                >
+                                    <Trash2 className="w-4 h-4" /> Delete Subject
+                                </button>
+
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsManageSubjectModalOpen(false)}
+                                        className="px-4 py-3 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-2xl transition cursor-pointer"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-md transition cursor-pointer"
+                                    >
+                                        <Check className="w-4 h-4" /> Save Changes
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* ADD CLASS / SEMESTER MODAL */}
             {isClassModalOpen && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-md animate-in fade-in"
                     onMouseDown={(e) => {
-                        if (
-                            e.target ===
-                            e.currentTarget
-                        ) {
-                            setIsClassModalOpen(
-                                false
-                            );
-                            setSessionClassesAdded(
-                                0
-                            );
+                        if (e.target === e.currentTarget) {
+                            setIsClassModalOpen(false);
+                            setSessionClassesAdded(0);
                         }
                     }}
                 >
@@ -1859,7 +2351,7 @@ function SyllabusContent() {
                                 </label>
                                 <input
                                     type="text"
-                                    placeholder="e.g. Communicative English"
+                                    placeholder="e.g. Communicative English or Value Added Course"
                                     value={courseName}
                                     onChange={(e) => setCourseName(e.target.value)}
                                     required
@@ -1874,7 +2366,7 @@ function SyllabusContent() {
                                 </label>
                                 <input
                                     type="text"
-                                    placeholder="e.g. ENG-101"
+                                    placeholder="e.g. ENG-101 or VAC-01"
                                     value={courseCode}
                                     onChange={(e) => setCourseCode(e.target.value)}
                                     required

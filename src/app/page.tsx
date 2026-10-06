@@ -14,7 +14,8 @@ import {
   X,
   Award,
   HelpCircle,
-  Loader2
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 
 const WHATSAPP_COMMUNITY_URL =
@@ -35,6 +36,7 @@ export default function Home() {
   const [showSignInModal, setShowSignInModal] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneError, setPhoneError] = useState('');
 
   useEffect(() => {
     setMounted(true);
@@ -42,12 +44,14 @@ export default function Home() {
       // 1. Check profplan_v2_profile
       const storedProfile = localStorage.getItem('profplan_v2_profile');
       let foundOnboarded = false;
+      let resolvedName = '';
 
       if (storedProfile) {
         const parsed = JSON.parse(storedProfile);
         if (parsed?.onboarded || parsed?.name) {
           foundOnboarded = true;
-          setUserName(parsed.name || 'Teacher');
+          resolvedName = parsed.name || 'Teacher';
+          setUserName(resolvedName);
         }
       }
 
@@ -60,7 +64,9 @@ export default function Home() {
           (parsedData?.slots && parsedData.slots.length > 0)
         ) {
           foundOnboarded = true;
-          if (!userName) setUserName('Teacher');
+          if (!resolvedName) {
+            setUserName('Teacher');
+          }
         }
       }
 
@@ -76,7 +82,7 @@ export default function Home() {
     return () => {
       localStorage.removeItem('profplan_landing_active');
     };
-  }, [userName]);
+  }, []);
 
   const handleLaunchSetup = () => {
     localStorage.removeItem('profplan_landing_active');
@@ -103,9 +109,13 @@ export default function Home() {
 
   const handlePhoneSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (phoneNumber.trim().length === 10) {
-      localStorage.setItem('profplan_user_phone', phoneNumber.trim());
+    const cleanPhone = phoneNumber.trim();
+    if (cleanPhone.length !== 10) {
+      setPhoneError('Please enter a valid 10-digit mobile number.');
+      return;
     }
+    setPhoneError('');
+    localStorage.setItem('profplan_user_phone', cleanPhone);
     handleDirectWorkspace();
   };
 
@@ -217,7 +227,10 @@ export default function Home() {
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => setShowSignInModal(true)}
+              onClick={() => {
+                setPhoneError('');
+                setShowSignInModal(true);
+              }}
               className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-white/20 bg-white/10 py-2.5 px-3 text-xs font-bold text-white hover:bg-white/15 transition cursor-pointer"
             >
               <LogIn className="h-3.5 w-3.5 text-indigo-300 shrink-0" />
@@ -316,6 +329,7 @@ export default function Home() {
               onClick={() => {
                 setShowSignInModal(false);
                 setIsConnecting(false);
+                setPhoneError('');
               }}
               className="absolute right-4 top-4 rounded-xl p-1.5 text-slate-400 hover:bg-white/10 hover:text-white transition cursor-pointer"
             >
@@ -371,10 +385,20 @@ export default function Home() {
                   type="tel"
                   maxLength={10}
                   value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => {
+                    setPhoneNumber(e.target.value.replace(/\D/g, ''));
+                    setPhoneError('');
+                  }}
                   placeholder="10-digit registered WhatsApp / Phone"
                   className="w-full rounded-xl border border-slate-700 bg-white/5 px-4 py-3 text-xs font-semibold text-white placeholder:text-slate-500 outline-none focus:border-indigo-500"
                 />
+
+                {phoneError && (
+                  <div className="flex items-center gap-1.5 text-xs text-rose-400 font-bold px-1">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span>{phoneError}</span>
+                  </div>
+                )}
 
                 <button
                   type="submit"

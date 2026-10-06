@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -22,9 +22,7 @@ import {
     Home,
     Plus,
     X,
-    GraduationCap,
     Info,
-    Trash2,
     HelpCircle
 } from 'lucide-react';
 
@@ -211,6 +209,18 @@ function LogFormContent() {
     // Toggleable Quick Guide State
     const [showGuide, setShowGuide] = useState(false);
 
+    // Inline Validation Banner State
+    const [validationError, setValidationError] = useState<string | null>(null);
+
+    // References for scrolling & focusing empty fields on mobile
+    const dateRef = useRef<HTMLInputElement>(null);
+    const slotSelectRef = useRef<HTMLSelectElement>(null);
+    const courseSelectRef = useRef<HTMLSelectElement>(null);
+    const customSubjectRef = useRef<HTMLInputElement>(null);
+    const customSemesterRef = useRef<HTMLSelectElement>(null);
+    const coveredRef = useRef<HTMLInputElement>(null);
+    const roomRef = useRef<HTMLInputElement>(null);
+
     const [d, setD] = useState<ProfPlanData>({
         courses: [],
         units: [],
@@ -390,6 +400,7 @@ function LogFormContent() {
     }, [form.actualStart, form.actualEnd]);
 
     function updateForm(field: string, value: any) {
+        setValidationError(null); // Clear error message when user starts typing/selecting
         setForm((prev: any) => {
             const updated = { ...prev, [field]: value };
             if (field === 'actualStart' || field === 'actualEnd') {
@@ -404,6 +415,7 @@ function LogFormContent() {
 
     function handleApplyPreset(classType: string, defaultRemarks: string) {
         setIsCustomSubjectMode(true);
+        setValidationError(null);
         setForm((prev: any) => ({
             ...prev,
             classSource: 'Extra / Unscheduled Class',
@@ -425,6 +437,7 @@ function LogFormContent() {
         const actualEnd = normalizeTime(slot.end, '09:45');
         const hours = calculateDurationHours(actualStart, actualEnd);
 
+        setValidationError(null);
         setIsCustomSubjectMode(false);
         setForm((prev: any) => ({
             ...prev,
@@ -441,6 +454,7 @@ function LogFormContent() {
     }
 
     function changeDate(newDate: string) {
+        setValidationError(null);
         setForm((prev: any) => ({ ...prev, date: newDate, slotId: '' }));
     }
 
@@ -472,31 +486,62 @@ function LogFormContent() {
         e.preventDefault();
         if (!d) return;
 
+        // Validation Checks with Mobile Focus & Scroll Guidance
+        if (!form.date) {
+            setValidationError('Please select the date of the class.');
+            dateRef.current?.focus();
+            dateRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
         if (form.classSource === 'Scheduled Class' && !form.slotId) {
-            alert('Please select the scheduled routine period.');
+            setValidationError('Please select the scheduled routine period.');
+            slotSelectRef.current?.focus();
+            slotSelectRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
 
         if (!isCustomSubjectMode && !form.courseId) {
-            alert('Please select a Course / Subject.');
+            setValidationError('Please select a Course / Subject.');
+            courseSelectRef.current?.focus();
+            courseSelectRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
 
         if (isCustomSubjectMode && !customSubjectName.trim()) {
-            alert('Please enter a Custom Subject or Activity Name.');
+            setValidationError('Please enter a Custom Subject or Activity Name.');
+            customSubjectRef.current?.focus();
+            customSubjectRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        if (isCustomSubjectMode && !form.semester) {
+            setValidationError('Please select target Class / Semester / Batch.');
+            customSemesterRef.current?.focus();
+            customSemesterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        if (!form.covered.trim()) {
+            setValidationError('Please enter the Topic or Activity Actually Covered.');
+            coveredRef.current?.focus();
+            coveredRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
 
         if (!form.room.trim()) {
-            alert('Please enter the Room / Lecture Hall.');
+            setValidationError('Please enter the Room / Lecture Hall.');
+            roomRef.current?.focus();
+            roomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
 
         if (calculatedHours <= 0) {
-            alert('Actual End Time must be later than Actual Start Time.');
+            setValidationError('Actual End Time must be later than Actual Start Time.');
             return;
         }
 
+        setValidationError(null);
         const plannedTopicObj = d.topics?.find((t: any) => t.id === form.topicId);
 
         const newLog = {
@@ -607,6 +652,30 @@ function LogFormContent() {
                 </div>
             </section>
 
+            {/* LIVE VALIDATION WARNING BANNER FOR MOBILE */}
+            {validationError && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-300 p-4 bg-rose-50 border-2 border-rose-300 rounded-2xl text-rose-900 shadow-lg flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white shadow-md">
+                        <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-rose-950">
+                            Required Field Missing
+                        </h4>
+                        <p className="text-xs font-bold text-rose-800 mt-0.5">
+                            {validationError}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setValidationError(null)}
+                        className="text-rose-600 hover:text-rose-900 p-1 rounded-lg transition"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+            )}
+
             {/* TOGGLEABLE QUICK GUIDE SECTION */}
             <div className="print:hidden space-y-2">
                 <button
@@ -644,7 +713,7 @@ function LogFormContent() {
             </div>
 
             {/* FORM BODY */}
-            <form onSubmit={submit} className="space-y-6">
+            <form onSubmit={submit} className="space-y-6" noValidate>
 
                 {/* 1. DATE & SCHEDULE CARD */}
                 <div className="rounded-3xl border border-slate-200 bg-white p-6 md:p-7 shadow-sm space-y-5">
@@ -695,6 +764,7 @@ function LogFormContent() {
                                 Date of Class <span className="text-rose-500">*</span>
                             </label>
                             <input
+                                ref={dateRef}
                                 type="date"
                                 value={form.date}
                                 onChange={(e) => changeDate(e.target.value)}
@@ -778,6 +848,7 @@ function LogFormContent() {
                                 </div>
                             ) : (
                                 <select
+                                    ref={slotSelectRef}
                                     value={form.slotId}
                                     onChange={(e) => selectScheduledSlot(e.target.value)}
                                     className="w-full px-4 py-3 text-sm font-semibold rounded-xl border-2 border-indigo-200/80 bg-white text-slate-900 focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 transition cursor-pointer"
@@ -831,6 +902,7 @@ function LogFormContent() {
                                     Custom Subject / Activity Name <span className="text-rose-500">*</span>
                                 </label>
                                 <input
+                                    ref={customSubjectRef}
                                     type="text"
                                     value={customSubjectName}
                                     onChange={(e) => setCustomSubjectName(e.target.value)}
@@ -856,6 +928,7 @@ function LogFormContent() {
                                 </div>
 
                                 <select
+                                    ref={customSemesterRef}
                                     value={form.semester}
                                     onChange={(e) => updateForm('semester', e.target.value)}
                                     required={isCustomSubjectMode}
@@ -879,6 +952,7 @@ function LogFormContent() {
                                     Course / Paper <span className="text-rose-500">*</span>
                                 </label>
                                 <select
+                                    ref={courseSelectRef}
                                     value={form.courseId}
                                     onChange={(e) => {
                                         const cId = e.target.value;
@@ -962,6 +1036,7 @@ function LogFormContent() {
                             </span>
                         </div>
                         <input
+                            ref={coveredRef}
                             type="text"
                             value={form.covered}
                             onChange={(e) => updateForm('covered', e.target.value)}
@@ -1039,6 +1114,7 @@ function LogFormContent() {
                                 Room / Hall <span className="text-rose-500">*</span>
                             </label>
                             <input
+                                ref={roomRef}
                                 type="text"
                                 value={form.room}
                                 onChange={(e) => updateForm('room', e.target.value)}
@@ -1261,7 +1337,7 @@ function LogFormContent() {
 
                                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                                     <button
-                                        type="button"
+                                           type="button"
                                         onClick={() => setIsAddClassModalOpen(false)}
                                         className="px-5 py-3 text-xs font-extrabold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
                                     >
