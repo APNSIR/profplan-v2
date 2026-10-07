@@ -1,0 +1,23 @@
+{
+  "name": "ProfPlan - OdishaTeachers.com",
+  "short_name": "ProfPlan",
+  "description": "E-Lesson Plan-cum-Progress Register for Educators in Odisha",
+  "start_url": "/today",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#1e1b4b",
+  "icons": [
+    {
+      "src": "/apnsir-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apnsir-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

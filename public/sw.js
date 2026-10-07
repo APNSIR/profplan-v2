@@ -1,7 +1,7 @@
 // public/sw.js
-const CACHE_NAME = 'profplan-cache-v2';
+const CACHE_NAME = 'profplan-cache-v3';
 
-// Core routes to pre-cache immediately upon install
+// Core routes and assets to pre-cache immediately upon install
 const PRECACHE_ASSETS = [
   '/',
   '/today',
@@ -10,8 +10,10 @@ const PRECACHE_ASSETS = [
   '/log',
   '/holidays',
   '/reports',
+  '/setup',
   '/manifest.webmanifest',
-  '/apnsir-logo.png'
+  '/apnsir-logo.png',
+  '/charumani-parida.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -44,7 +46,6 @@ function cleanRedirectedResponse(response) {
   if (!response || !response.redirected) {
     return response;
   }
-  // Re-create a clean response without the internal redirected flag
   const body = response.body;
   return new Response(body, {
     headers: response.headers,
@@ -59,15 +60,15 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // Skip external analytics, chrome extensions, and Google auth APIs
+  // Skip external analytics, chrome extensions, APIs, and Supabase cloud sync calls
   if (!url.origin.includes(self.location.origin)) return;
+  if (url.pathname.startsWith('/api/') || url.hostname.includes('supabase.co')) return;
 
-  // Let browser natively handle top-level page navigations to prevent redirect conflicts
+  // Handle top-level page navigations (Network first with cache fallback)
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
         .then((networkResponse) => {
-          // If the network response was redirected (e.g. non-www to www), clean it for Safari
           const sanitized = cleanRedirectedResponse(networkResponse);
           if (networkResponse && networkResponse.status === 200) {
             const copy = sanitized.clone();
@@ -76,7 +77,6 @@ self.addEventListener('fetch', (event) => {
           return sanitized;
         })
         .catch(async () => {
-          // Offline fallback: serve from cache if available
           const cached = await caches.match(event.request);
           if (cached) return cached;
           return caches.match('/today') || caches.match('/');

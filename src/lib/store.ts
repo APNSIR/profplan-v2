@@ -51,6 +51,7 @@ export type {
 
 const STORAGE_KEY = 'profplan_v2_data';
 const PROFILE_KEY = 'profplan_v2_profile';
+const SESSION_SETTING_KEY = 'profplan_custom_academic_session';
 
 /*
  * =========================================================
@@ -320,7 +321,7 @@ export function saveProfile(profile: UserProfile): void {
 
 /*
  * =========================================================
- * CURRENT ACADEMIC SESSION
+ * CURRENT & MANAGED ACADEMIC SESSION
  * =========================================================
  */
 
@@ -334,4 +335,30 @@ export function getCurrentAcademicSession(): string {
     }
 
     return `${year - 1}-${year}`;
+}
+
+export function getActiveAcademicSession(): string {
+    if (typeof window === 'undefined') return getCurrentAcademicSession();
+
+    try {
+        const custom = localStorage.getItem(SESSION_SETTING_KEY);
+        if (custom && custom.trim() !== '') {
+            return custom.trim();
+        }
+    } catch (e) {
+        console.error('Failed to load custom session:', e);
+    }
+
+    return getCurrentAcademicSession();
+}
+
+export function saveActiveAcademicSession(sessionStr: string): void {
+    if (typeof window === 'undefined') return;
+
+    try {
+        localStorage.setItem(SESSION_SETTING_KEY, sessionStr.trim());
+        window.dispatchEvent(new Event('profplan-session-change'));
+    } catch (e) {
+        console.error('Failed to save custom session:', e);
+    }
 }
